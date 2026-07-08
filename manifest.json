@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "LAN Shared Clipboard",
+  "version": "1.0",
+  "description": "Locally copy and paste text across devices on the same LAN using WebRTC.",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "clipboardRead",
+    "clipboardWrite",
+    "notifications",
+    "offscreen"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

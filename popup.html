@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>LAN Shared Clipboard</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      width: 320px;
+      padding: 20px;
+      background-color: #ffffff;
+      color: #111827;
+      margin: 0;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .header h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      color: #111827;
+      letter-spacing: -0.02em;
+    }
+    .form-group {
+      margin-bottom: 12px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #4b5563;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      box-sizing: border-box;
+      font-size: 14px;
+      background: #f9fafb;
+      transition: all 0.2s;
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      background-color: #ffffff;
+    }
+    .btn-primary {
+      width: 100%;
+      padding: 10px 16px;
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .btn-primary:hover {
+      background-color: #1d4ed8;
+    }
+    .btn-danger {
+      width: 100%;
+      padding: 10px 16px;
+      background-color: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      display: none;
+    }
+    .btn-danger:hover {
+      background-color: #dc2626;
+    }
+    .status-container {
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      border-radius: 8px;
+      background-color: #f3f4f6;
+      font-size: 13px;
+      font-weight: 500;
+      color: #4b5563;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+      background-color: #9ca3af;
+    }
+    .status-container.connected {
+      background-color: #ecfdf5;
+      color: #065f46;
+    }
+    .status-container.connected .status-dot {
+      background-color: #10b981;
+    }
+    .status-container.error {
+      background-color: #fef2f2;
+      color: #991b1b;
+    }
+    .status-container.error .status-dot {
+      background-color: #ef4444;
+    }
+    
+    .input-section {
+      margin-top: 20px;
+    }
+    .input-section label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #4b5563;
+    }
+    #manualInput {
+      width: 100%;
+      min-height: 60px;
+      max-height: 120px;
+      overflow-y: auto;
+      padding: 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      box-sizing: border-box;
+      font-size: 13px;
+      background: #f9fafb;
+      margin-bottom: 8px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    #manualInput:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      background-color: #ffffff;
+    }
+    #manualInput:empty:before {
+      content: attr(placeholder);
+      color: #9ca3af;
+      pointer-events: none;
+      display: block;
+    }
+    #manualInput img {
+      max-width: 100%;
+      max-height: 100px;
+      border-radius: 4px;
+      display: block;
+      margin-top: 4px;
+    }
+    #sendBtn {
+      width: 100%;
+      padding: 8px 12px;
+      background-color: #10b981;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    #sendBtn:hover {
+      background-color: #059669;
+    }
+    #sendBtn:disabled {
+      background-color: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .history {
+      margin-top: 24px;
+    }
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .history-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0;
+      color: #111827;
+    }
+    .btn-clear {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #ef4444;
+      background-color: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-clear:hover {
+      background-color: #fee2e2;
+      border-color: #fca5a5;
+    }
+    .history-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .history-list::-webkit-scrollbar {
+      width: 6px;
+    }
+    .history-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .history-list::-webkit-scrollbar-thumb {
+      background-color: #d1d5db;
+      border-radius: 10px;
+    }
+    .history-item {
+      font-size: 13px;
+      background: #ffffff;
+      padding: 10px 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      color: #374151;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .history-item:hover {
+      border-color: #d1d5db;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      transform: translateY(-1px);
+    }
+    .history-item-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #6b7280;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .history-item-content {
+      word-break: break-word;
+    }
+    .history-item-content.text-item {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .history-item-content img {
+      max-height: 60px;
+      max-width: 100%;
+      border-radius: 4px;
+      object-fit: contain;
+      align-self: flex-start;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>LAN Clipboard</h2>
+  </div>
+  
+  <div class="form-group" id="userGroup">
+    <label for="username">Your Name</label>
+    <input type="text" id="username" placeholder="e.g. John's Mac">
+  </div>
+  
+  <button id="connectBtn" class="btn-primary">Connect</button>
+  <button id="disconnectBtn" class="btn-danger">Disconnect</button>
+  
+  <div class="status-container" id="statusIndicator">
+    <div class="status-dot"></div>
+    <span id="statusText">Disconnected</span>
+  </div>
+  
+  <div class="input-section" id="inputSection">
+    <label>Manual Input</label>
+    <div id="manualInput" contenteditable="true" placeholder="Type or paste text/image here..."></div>
+    <button id="sendBtn" disabled>Send</button>
+  </div>
+  
+  <div class="history">
+    <div class="history-header">
+      <h3>Recent Clips</h3>
+      <button id="clearHistoryBtn" class="btn-clear">Clear</button>
+    </div>
+    <ul class="history-list" id="historyList">
+      <!-- Items will be added here -->
+    </ul>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
