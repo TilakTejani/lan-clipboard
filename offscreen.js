@@ -6,11 +6,27 @@ let roomCode = '';
 let lastClipboardSignature = null;
 let pollInterval = null;
 
-function broadcast(data) {
+async function broadcast(data) {
+  let sendData = data;
+  if (data.type === 'image/png' && data.dataUrl) {
+    try {
+      const res = await fetch(data.dataUrl);
+      const buffer = await res.arrayBuffer();
+      sendData = {
+        type: 'image/png',
+        buffer: buffer,
+        sender: data.sender,
+        timestamp: data.timestamp
+      };
+    } catch (e) {
+      console.error("Failed to convert image for WebRTC", e);
+    }
+  }
+
   if (isHost) {
-    connections.forEach(c => { if (c.open) c.send(data); });
+    connections.forEach(c => { if (c.open) c.send(sendData); });
   } else if (hostConn && hostConn.open) {
-    hostConn.send(data);
+    hostConn.send(sendData);
   }
 }
 
@@ -38,7 +54,19 @@ async function handleIncomingData(data) {
         clip: { type: 'text/plain', content: data.text, sender: data.sender, timestamp: data.timestamp } 
       });
     } else if (data.type === 'image/png') {
-      const signature = 'image:' + data.dataUrl.length;
+      let dataUrl = data.dataUrl;
+      if (data.buffer) {
+        const blob = new Blob([data.buffer], { type: 'image/png' });
+        dataUrl = await new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+      }
+      
+      if (!dataUrl) return;
+
+      const signature = 'image:' + dataUrl.length;
       if (signature === lastClipboardSignature) return;
       
       if (isHost) connections.forEach(c => { if (c.open) c.send(data); });
@@ -46,7 +74,7 @@ async function handleIncomingData(data) {
       lastClipboardSignature = signature;
       
       try {
-        const res = await fetch(data.dataUrl);
+        const res = await fetch(dataUrl);
         const blob = await res.blob();
         const item = new ClipboardItem({ 'image/png': blob });
         await navigator.clipboard.write([item]);
@@ -58,7 +86,7 @@ async function handleIncomingData(data) {
       
       chrome.runtime.sendMessage({ 
         type: 'SAVE_CLIP', 
-        clip: { type: 'image/png', content: data.dataUrl, sender: data.sender, timestamp: data.timestamp } 
+        clip: { type: 'image/png', content: dataUrl, sender: data.sender, timestamp: data.timestamp } 
       });
     }
   } catch (e) {
@@ -104,6 +132,12 @@ async function readClipboardData() {
     };
     
     document.addEventListener('paste', onPaste);
+    
+    // Safety timeout in case paste event never fires
+    setTimeout(() => {
+      document.removeEventListener('paste', onPaste);
+      resolve(null);
+    }, 200);
     
     const ta = document.createElement('textarea');
     document.body.appendChild(ta);
