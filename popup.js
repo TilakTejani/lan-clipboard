@@ -280,19 +280,42 @@ manualInput.addEventListener('input', () => {
   if (match) {
     const query = match[1].toLowerCase();
     const matches = currentOnlineUsers.filter(u => u.toLowerCase().startsWith(query));
-    if (matches.length > 0) {
+    
+    const tabOptionText = "Share Current Tab";
+    const includeTabOption = query === '' || tabOptionText.toLowerCase().includes(query) || "tab".startsWith(query);
+    
+    if (matches.length > 0 || includeTabOption) {
       mentionDropdown.innerHTML = '';
-      matches.forEach((u, idx) => {
+      let idxCount = 0;
+      matches.forEach((u) => {
         const div = document.createElement('div');
         div.className = 'mention-item';
-        if (idx === 0) div.classList.add('selected');
+        if (idxCount === 0) div.classList.add('selected');
         div.textContent = u;
         div.onmousedown = (e) => {
            e.preventDefault();
            insertMention(u);
         };
         mentionDropdown.appendChild(div);
+        idxCount++;
       });
+      
+      if (includeTabOption) {
+        const div = document.createElement('div');
+        div.className = 'mention-item tab-option';
+        if (idxCount === 0) div.classList.add('selected');
+        div.innerHTML = `🌐 <strong>Share Current Tab</strong>`;
+        div.onmousedown = (e) => {
+           e.preventDefault();
+           shareTabBtn.click();
+           mentionDropdown.style.display = 'none';
+           mentionIndex = -1;
+           const newText = manualInput.innerText.replace(/@[\w\s']*$/, '');
+           manualInput.innerText = newText;
+        };
+        mentionDropdown.appendChild(div);
+      }
+      
       mentionDropdown.style.display = 'block';
       mentionIndex = 0;
     } else {
@@ -333,7 +356,16 @@ manualInput.addEventListener('keydown', (e) => {
       }
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      insertMention(items[mentionIndex].textContent);
+      const selectedItem = items[mentionIndex];
+      if (selectedItem.classList.contains('tab-option')) {
+         shareTabBtn.click();
+         mentionDropdown.style.display = 'none';
+         mentionIndex = -1;
+         const newText = manualInput.innerText.replace(/@[\w\s']*$/, '');
+         manualInput.innerText = newText;
+      } else {
+         insertMention(selectedItem.textContent);
+      }
       return;
     } else if (e.key === 'Escape') {
       mentionDropdown.style.display = 'none';
