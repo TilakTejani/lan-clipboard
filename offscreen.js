@@ -5,6 +5,7 @@ let hostConn = null; // For client to keep track of host
 let roomCode = '';
 let lastClipboardSignature = null;
 let pollInterval = null;
+let myName = 'Anonymous';
 
 async function broadcast(data) {
   let sendData = data;
@@ -32,6 +33,12 @@ async function broadcast(data) {
 
 async function handleIncomingData(data) {
   try {
+    if (data.type === 'HANDSHAKE') {
+      const partnerName = data.username || 'Partner';
+      chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: `Connected to ${partnerName}` });
+      return;
+    }
+
     if (data.type === 'text/plain') {
       const signature = 'text:' + data.text;
       if (signature === lastClipboardSignature) return;
@@ -172,9 +179,10 @@ function cleanup() {
   isHost = false;
 }
 
-function setupPeer(code) {
+function setupPeer(code, username) {
   cleanup();
   roomCode = code;
+  myName = username || 'Anonymous';
   const hostId = roomCode + '-lan-clipboard-host';
   
   peer = new Peer();
@@ -185,7 +193,7 @@ function setupPeer(code) {
     hostConn.on('open', () => {
       isHost = false;
       startPolling();
-      chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected to partner' });
+      hostConn.send({ type: 'HANDSHAKE', username: myName });
     });
 
     hostConn.on('data', handleIncomingData);
@@ -209,7 +217,10 @@ function setupPeer(code) {
 
       peer.on('connection', (conn) => {
         connections.push(conn);
-        chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected to partner' });
+        
+        const sendHandshake = () => conn.send({ type: 'HANDSHAKE', username: myName });
+        if (conn.open) sendHandshake();
+        else conn.on('open', sendHandshake);
         
         conn.on('data', handleIncomingData);
         conn.on('close', () => {
@@ -257,7 +268,7 @@ function generateIcon() {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'CONNECT_OFFSCREEN') {
-    setupPeer(message.roomCode);
+    setupPeer(message.roomCode, message.username);
     sendResponse({ success: true });
   } else if (message.type === 'DISCONNECT_OFFSCREEN') {
     cleanup();

@@ -37,12 +37,12 @@ async function updateUI() {
   if (data.status) {
     statusText.textContent = data.status;
     let stClass = '';
-    if (data.status === 'Connected to partner') stClass = 'connected';
+    if (data.status.startsWith('Connected to ')) stClass = 'connected';
     else if (data.status === 'Waiting for partner...') stClass = 'waiting';
     else if (data.status === 'Error') stClass = 'error';
     statusIndicator.className = 'status-container ' + stClass;
     
-    if (data.status === 'Connected to partner' || data.status === 'Waiting for partner...' || data.status === 'Connecting...') {
+    if (data.status.startsWith('Connected to ') || data.status === 'Waiting for partner...' || data.status === 'Connecting...') {
       connectBtn.style.display = 'none';
       disconnectBtn.style.display = 'block';
       userGroup.style.display = 'none';
@@ -52,7 +52,7 @@ async function updateUI() {
       userGroup.style.display = 'block';
     }
     
-    if (data.status === 'Connected to partner') {
+    if (data.status.startsWith('Connected to ')) {
       sendBtn.disabled = false;
     } else {
       sendBtn.disabled = true;
@@ -136,7 +136,7 @@ connectBtn.addEventListener('click', async () => {
   const roomCode = 'default-lan-room';
   await chrome.storage.local.set({ roomCode, status: 'Connecting...' });
   updateUI();
-  chrome.runtime.sendMessage({ type: 'CONNECT', roomCode });
+  chrome.runtime.sendMessage({ type: 'CONNECT', roomCode, username });
 });
 
 disconnectBtn.addEventListener('click', async () => {

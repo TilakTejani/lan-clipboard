@@ -66,7 +66,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       await setupOffscreenDocument('offscreen.html');
       chrome.runtime.sendMessage({
         type: 'CONNECT_OFFSCREEN',
-        roomCode: message.roomCode
+        roomCode: message.roomCode,
+        username: message.username
       }).catch(() => {});
       sendResponse({ success: true });
     })();
