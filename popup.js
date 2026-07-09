@@ -36,19 +36,23 @@ async function updateUI() {
   
   if (data.status) {
     statusText.textContent = data.status;
-    statusIndicator.className = 'status-container ' + (data.status === 'Connected' ? 'connected' : (data.status === 'Error' ? 'error' : ''));
+    let stClass = '';
+    if (data.status === 'Connected to partner') stClass = 'connected';
+    else if (data.status === 'Waiting for partner...') stClass = 'waiting';
+    else if (data.status === 'Error') stClass = 'error';
+    statusIndicator.className = 'status-container ' + stClass;
     
-    if (data.status === 'Connected' || data.status === 'Connecting...') {
+    if (data.status === 'Connected to partner' || data.status === 'Waiting for partner...' || data.status === 'Connecting...') {
       connectBtn.style.display = 'none';
       disconnectBtn.style.display = 'block';
-      userGroup.style.display = 'none'; // hide username input while connected
+      userGroup.style.display = 'none';
     } else {
       connectBtn.style.display = 'block';
       disconnectBtn.style.display = 'none';
       userGroup.style.display = 'block';
     }
     
-    if (data.status === 'Connected') {
+    if (data.status === 'Connected to partner') {
       sendBtn.disabled = false;
     } else {
       sendBtn.disabled = true;

@@ -185,7 +185,7 @@ function setupPeer(code) {
     hostConn.on('open', () => {
       isHost = false;
       startPolling();
-      chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected' });
+      chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected to partner' });
     });
 
     hostConn.on('data', handleIncomingData);
@@ -204,14 +204,19 @@ function setupPeer(code) {
       peer.on('open', () => {
         isHost = true;
         startPolling();
-        chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected' });
+        chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Waiting for partner...' });
       });
 
       peer.on('connection', (conn) => {
         connections.push(conn);
+        chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected to partner' });
+        
         conn.on('data', handleIncomingData);
         conn.on('close', () => {
           connections = connections.filter(c => c !== conn);
+          if (connections.length === 0) {
+            chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Waiting for partner...' });
+          }
         });
       });
       
