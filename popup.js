@@ -7,19 +7,35 @@ const historyList = document.getElementById('historyList');
 const manualInput = document.getElementById('manualInput');
 const sendBtn = document.getElementById('sendBtn');
 const userGroup = document.getElementById('userGroup');
+const displayUsername = document.getElementById('displayUsername');
+
+function updateTitle() {
+  const name = usernameInput.value.trim();
+  if (name) {
+    displayUsername.textContent = name;
+  } else {
+    displayUsername.textContent = 'LAN Clipboard';
+  }
+}
 
 // Load saved username or prompt for it on first run
 chrome.storage.local.get(['username'], (data) => {
   if (data.username) {
     usernameInput.value = data.username;
+    updateTitle();
   } else {
     // First time running!
-    const name = prompt("Welcome to LAN Clipboard!\\n\\nPlease enter your name (e.g. John's Mac):");
+    const name = prompt("Welcome to LAN Clipboard!\n\nPlease enter your name (e.g. John's Mac):");
     if (name) {
       usernameInput.value = name;
       chrome.storage.local.set({ username: name.trim() });
+      updateTitle();
     }
   }
+});
+
+usernameInput.addEventListener('input', () => {
+  updateTitle();
 });
 
 usernameInput.addEventListener('change', () => {
