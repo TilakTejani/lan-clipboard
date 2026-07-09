@@ -170,6 +170,45 @@
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
       background-color: #ffffff;
     }
+    .mention-dropdown {
+      position: absolute;
+      top: 100%;
+      margin-top: 4px;
+      left: 0;
+      width: 100%;
+      max-height: 150px;
+      overflow-y: auto;
+      background: white;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      z-index: 50;
+    }
+    .mention-item {
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .mention-item:last-child {
+      border-bottom: none;
+    }
+    .mention-item:hover, .mention-item.selected {
+      background-color: #f3f4f6;
+    }
+    .private-clip {
+      background-color: #fefce8;
+      border-color: #fef08a;
+    }
+    .private-badge {
+      font-size: 10px;
+      background: #fef08a;
+      color: #854d0e;
+      padding: 2px 6px;
+      border-radius: 8px;
+      margin-left: 6px;
+      font-weight: 600;
+    }
     #manualInput:empty:before {
       content: attr(placeholder);
       color: #9ca3af;
@@ -340,7 +379,10 @@
   
   <div class="input-section" id="inputSection">
     <label>Manual Input</label>
-    <div id="manualInput" contenteditable="true" placeholder="Type or paste text/image here..."></div>
+    <div style="position: relative;">
+      <div id="manualInput" contenteditable="true" placeholder="Type or paste text/image here..."></div>
+      <div id="mentionDropdown" class="mention-dropdown" style="display:none;"></div>
+    </div>
     <button id="sendBtn" disabled>Send</button>
     <button id="shareTabBtn" disabled>Share Current Tab</button>
   </div>

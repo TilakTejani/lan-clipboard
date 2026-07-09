@@ -11,6 +11,23 @@ const userGroup = document.getElementById('userGroup');
 const displayUsername = document.getElementById('displayUsername');
 const badgesContainer = document.getElementById('badgesContainer');
 
+let currentOnlineUsers = [];
+const mentionDropdown = document.getElementById('mentionDropdown');
+let mentionIndex = -1;
+
+function placeCaretAtEnd(el) {
+    el.focus();
+    if (typeof window.getSelection !== "undefined"
+            && typeof document.createRange !== "undefined") {
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+}
+
 function updateTitle() {
   const name = usernameInput.value.trim();
   if (name) {
@@ -65,6 +82,7 @@ async function updateUI() {
     } else {
       isActuallyConnected = true;
       const users = data.onlineUsers || [];
+      currentOnlineUsers = users;
       if (users.length === 0) {
          badgesContainer.innerHTML = `<div class="badge badge-connected"><div class="status-dot"></div>Connected</div>`;
       } else {
@@ -72,6 +90,11 @@ async function updateUI() {
            const b = document.createElement('div');
            b.className = 'badge badge-connected';
            b.innerHTML = `<div class="status-dot"></div>${u}`;
+           b.style.cursor = 'pointer';
+           b.onclick = () => {
+             manualInput.innerText += (manualInput.innerText.length > 0 && !manualInput.innerText.endsWith(' ') ? ' ' : '') + `@${u} `;
+             placeCaretAtEnd(manualInput);
+           };
            badgesContainer.appendChild(b);
          });
       }
@@ -103,12 +126,18 @@ async function updateUI() {
 
       const li = document.createElement('li');
       li.className = 'history-item';
+      if (item.target) {
+        li.classList.add('private-clip');
+      }
       
       const meta = document.createElement('div');
       meta.className = 'history-item-meta';
       const senderSpan = document.createElement('span');
       senderSpan.style.color = '#3b82f6';
-      senderSpan.textContent = item.sender || 'Anonymous';
+      senderSpan.innerHTML = item.sender || 'Anonymous';
+      if (item.target) {
+        senderSpan.innerHTML += `<span class="private-badge">Private to ${item.target}</span>`;
+      }
       const timeSpan = document.createElement('span');
       timeSpan.textContent = formatTime(item.timestamp);
       meta.appendChild(senderSpan);
@@ -230,21 +259,95 @@ sendBtn.addEventListener('click', async () => {
   } else {
     // Handle text
     const text = manualInput.innerText.trim();
+    let target = null;
+    currentOnlineUsers.forEach(u => {
+      if (text.includes(`@${u}`)) target = u;
+    });
+
     if (text) {
       chrome.runtime.sendMessage({ 
         type: 'BROADCAST_AND_SAVE_CLIP', 
-        clipData: { type: 'text/plain', text }
+        clipData: { type: 'text/plain', text, target }
       });
       manualInput.innerHTML = ''; // clear input
     }
   }
 });
 
-manualInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendBtn.click();
+manualInput.addEventListener('input', () => {
+  const text = manualInput.innerText.replace(/[\n\r]+$/, '').replace(/\u00A0/g, ' ');
+  const match = text.match(/@([\w\s']*)$/);
+  if (match) {
+    const query = match[1].toLowerCase();
+    const matches = currentOnlineUsers.filter(u => u.toLowerCase().startsWith(query));
+    if (matches.length > 0) {
+      mentionDropdown.innerHTML = '';
+      matches.forEach((u, idx) => {
+        const div = document.createElement('div');
+        div.className = 'mention-item';
+        if (idx === 0) div.classList.add('selected');
+        div.textContent = u;
+        div.onmousedown = (e) => {
+           e.preventDefault();
+           insertMention(u);
+        };
+        mentionDropdown.appendChild(div);
+      });
+      mentionDropdown.style.display = 'block';
+      mentionIndex = 0;
+    } else {
+      mentionDropdown.style.display = 'none';
+      mentionIndex = -1;
+    }
+  } else {
+    mentionDropdown.style.display = 'none';
+    mentionIndex = -1;
   }
+});
+
+function insertMention(username) {
+   const text = manualInput.innerText;
+   const newText = text.replace(/@[\w\s']*$/, `@${username} `);
+   manualInput.innerText = newText;
+   mentionDropdown.style.display = 'none';
+   mentionIndex = -1;
+   placeCaretAtEnd(manualInput);
+}
+
+manualInput.addEventListener('keydown', (e) => {
+  if (mentionDropdown.style.display === 'block') {
+    const items = mentionDropdown.querySelectorAll('.mention-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (mentionIndex < items.length - 1) {
+        items[mentionIndex].classList.remove('selected');
+        mentionIndex++;
+        items[mentionIndex].classList.add('selected');
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (mentionIndex > 0) {
+        items[mentionIndex].classList.remove('selected');
+        mentionIndex--;
+        items[mentionIndex].classList.add('selected');
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      insertMention(items[mentionIndex].textContent);
+      return;
+    } else if (e.key === 'Escape') {
+      mentionDropdown.style.display = 'none';
+    }
+  } else {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendBtn.click();
+    }
+  }
+});
+
+manualInput.addEventListener('blur', () => {
+  setTimeout(() => mentionDropdown.style.display = 'none', 100);
 });
 
 shareTabBtn.addEventListener('click', async () => {

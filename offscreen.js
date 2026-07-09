@@ -209,6 +209,18 @@ function broadcastParticipants() {
   });
 }
 
+function broadcastClip(clipData) {
+  connections.forEach((c, peerId) => {
+    if (c.open) {
+      if (clipData.target && c.partnerName !== clipData.target && c.partnerName !== clipData.sender) {
+        // Skip this connection because the message is targeted to someone else
+        return;
+      }
+      c.send({ type: 'SAVE_CLIP', clip: clipData });
+    }
+  });
+}
+
 function cleanup() {
   if (pollInterval) clearInterval(pollInterval);
   if (peer) peer.destroy();
