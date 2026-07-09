@@ -202,6 +202,29 @@
       background-color: #9ca3af;
       cursor: not-allowed;
     }
+    
+    #shareTabBtn {
+      width: 100%;
+      padding: 10px 12px;
+      margin-top: 8px;
+      background-color: #f3f4f6;
+      color: #4b5563;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #shareTabBtn:hover {
+      background-color: #e5e7eb;
+      color: #1f2937;
+    }
+    #shareTabBtn:disabled {
+      background-color: #f9fafb;
+      color: #d1d5db;
+      cursor: not-allowed;
+    }
 
     .history {
       margin-top: 24px;
@@ -319,6 +342,7 @@
     <label>Manual Input</label>
     <div id="manualInput" contenteditable="true" placeholder="Type or paste text/image here..."></div>
     <button id="sendBtn" disabled>Send</button>
+    <button id="shareTabBtn" disabled>Share Current Tab</button>
   </div>
   
   <div class="history">

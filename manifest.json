@@ -9,7 +9,8 @@
     "clipboardRead",
     "clipboardWrite",
     "notifications",
-    "offscreen"
+    "offscreen",
+    "activeTab"
   ],
   "background": {
     "service_worker": "background.js"

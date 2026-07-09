@@ -6,6 +6,7 @@ const statusText = document.getElementById('statusText');
 const historyList = document.getElementById('historyList');
 const manualInput = document.getElementById('manualInput');
 const sendBtn = document.getElementById('sendBtn');
+const shareTabBtn = document.getElementById('shareTabBtn');
 const userGroup = document.getElementById('userGroup');
 const displayUsername = document.getElementById('displayUsername');
 const badgesContainer = document.getElementById('badgesContainer');
@@ -89,6 +90,7 @@ async function updateUI() {
     }
     
     sendBtn.disabled = !isActuallyConnected;
+    shareTabBtn.disabled = !isActuallyConnected;
   }
 
   if (data.history) {
@@ -139,6 +141,16 @@ async function updateUI() {
                setTimeout(() => { contentDiv.innerHTML = ''; contentDiv.appendChild(img); }, 1000);
              });
         };
+      } else if (item.type === 'text/url') {
+        contentDiv.classList.add('text-item');
+        const a = document.createElement('a');
+        a.href = item.content;
+        a.target = '_blank';
+        a.style.color = '#2563eb';
+        a.style.textDecoration = 'underline';
+        a.style.wordBreak = 'break-all';
+        a.textContent = item.content;
+        contentDiv.appendChild(a);
       } else {
         contentDiv.classList.add('text-item');
         contentDiv.textContent = item.content;
@@ -232,5 +244,33 @@ manualInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendBtn.click();
+  }
+});
+
+shareTabBtn.addEventListener('click', async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab && tab.url) {
+      chrome.runtime.sendMessage({ 
+        type: 'BROADCAST_AND_SAVE_CLIP', 
+        clipData: { 
+          type: 'text/url', 
+          text: tab.url,
+          title: tab.title 
+        }
+      });
+      
+      const originalText = shareTabBtn.textContent;
+      shareTabBtn.textContent = 'Sent!';
+      shareTabBtn.style.backgroundColor = '#d1fae5';
+      shareTabBtn.style.color = '#065f46';
+      setTimeout(() => {
+        shareTabBtn.textContent = originalText;
+        shareTabBtn.style.backgroundColor = '';
+        shareTabBtn.style.color = '';
+      }, 2000);
+    }
+  } catch (e) {
+    console.error('Failed to get tab info', e);
   }
 });

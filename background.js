@@ -106,12 +106,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const iconUrl = await getIconDataUrl();
         if (iconUrl) {
           const isImage = clip.type === 'image/png';
-          chrome.notifications.create({
-            type: 'basic',
-            iconUrl: iconUrl,
-            title: `New Clip from ${clip.sender || 'Unknown'}`,
-            message: isImage ? '[Image Received]' : clip.content.substring(0, 50) + (clip.content.length > 50 ? '...' : '')
-          });
+          
+          if (clip.type === 'text/url') {
+            chrome.notifications.create({
+              type: 'basic',
+              iconUrl: iconUrl,
+              title: `New Shared Tab from ${clip.sender || 'Unknown'}`,
+              message: 'Click the extension to open: ' + clip.content.substring(0, 50)
+            });
+          } else {
+            chrome.notifications.create({
+              type: 'basic',
+              iconUrl: iconUrl,
+              title: `New Clip from ${clip.sender || 'Unknown'}`,
+              message: isImage ? '[Image Received]' : clip.content.substring(0, 50) + (clip.content.length > 50 ? '...' : '')
+            });
+          }
         }
       } catch (e) {
         console.error('Notification failed', e);
