@@ -441,32 +441,15 @@ manualInput.addEventListener('blur', () => {
   setTimeout(() => mentionDropdown.style.display = 'none', 100);
 });
 
-shareTabBtn.addEventListener('click', async () => {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+shareTabBtn.addEventListener('click', () => {
+  manualInput.focus();
+  placeCaretAtEnd(manualInput);
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs[0];
     if (tab && tab.url) {
-      chrome.runtime.sendMessage({ 
-        type: 'BROADCAST_AND_SAVE_CLIP', 
-        clipData: { 
-          type: 'text/url', 
-          text: tab.url,
-          title: tab.title 
-        }
-      });
-      
-      const originalText = shareTabBtn.textContent;
-      shareTabBtn.textContent = 'Sent!';
-      shareTabBtn.style.backgroundColor = '#d1fae5';
-      shareTabBtn.style.color = '#065f46';
-      setTimeout(() => {
-        shareTabBtn.textContent = originalText;
-        shareTabBtn.style.backgroundColor = '';
-        shareTabBtn.style.color = '';
-      }, 2000);
+      document.execCommand('insertText', false, tab.url + ' ');
     }
-  } catch (e) {
-    console.error('Failed to get tab info', e);
-  }
+  });
 });
 
 manualInput.addEventListener('dragover', (e) => {
