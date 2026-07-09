@@ -80,7 +80,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await chrome.runtime.sendMessage({ type: 'DISCONNECT_OFFSCREEN' });
       } catch (e) {}
       isConnected = false;
-      await chrome.storage.local.set({ status: 'Disconnected' });
+      await chrome.storage.local.set({ status: 'Disconnected', onlineUsers: [] });
       await closeOffscreenDocument();
       sendResponse({ success: true });
     })();
@@ -90,6 +90,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'STATUS_UPDATE') {
     isConnected = message.status === 'Connected';
     chrome.storage.local.set({ status: message.status });
+  }
+  
+  else if (message.type === 'PARTICIPANTS_UPDATE') {
+    chrome.storage.local.set({ onlineUsers: message.names });
   }
 
   else if (message.type === 'SAVE_CLIP') {

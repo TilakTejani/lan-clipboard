@@ -8,6 +8,7 @@ const manualInput = document.getElementById('manualInput');
 const sendBtn = document.getElementById('sendBtn');
 const userGroup = document.getElementById('userGroup');
 const displayUsername = document.getElementById('displayUsername');
+const badgesContainer = document.getElementById('badgesContainer');
 
 function updateTitle() {
   const name = usernameInput.value.trim();
@@ -48,17 +49,36 @@ function formatTime(ts) {
 }
 
 async function updateUI() {
-  const data = await chrome.storage.local.get(['status', 'history']);
+  const data = await chrome.storage.local.get(['status', 'history', 'onlineUsers']);
   
   if (data.status) {
-    statusText.textContent = data.status;
-    let stClass = '';
-    if (data.status.startsWith('Connected to ')) stClass = 'connected';
-    else if (data.status === 'Waiting for partner...') stClass = 'waiting';
-    else if (data.status === 'Error') stClass = 'error';
-    statusIndicator.className = 'status-container ' + stClass;
+    badgesContainer.innerHTML = '';
+    let isActuallyConnected = false;
+
+    if (data.status === 'Waiting for partner...') {
+      badgesContainer.innerHTML = `<div class="badge badge-waiting"><div class="status-dot"></div>Waiting for others...</div>`;
+    } else if (data.status === 'Connecting...') {
+      badgesContainer.innerHTML = `<div class="badge badge-connecting"><div class="status-dot"></div>Connecting...</div>`;
+    } else if (data.status === 'Disconnected' || data.status === 'Error') {
+      badgesContainer.innerHTML = `<div class="badge badge-connecting"><div class="status-dot" style="background-color:#ef4444;"></div>${data.status}</div>`;
+    } else {
+      isActuallyConnected = true;
+      const users = data.onlineUsers || [];
+      if (users.length === 0) {
+         badgesContainer.innerHTML = `<div class="badge badge-connected"><div class="status-dot"></div>Connected</div>`;
+      } else {
+         users.forEach(u => {
+           const b = document.createElement('div');
+           b.className = 'badge badge-connected';
+           b.innerHTML = `<div class="status-dot"></div>${u}`;
+           badgesContainer.appendChild(b);
+         });
+      }
+    }
     
-    if (data.status.startsWith('Connected to ') || data.status === 'Waiting for partner...' || data.status === 'Connecting...') {
+    const isNetworkActive = data.status !== 'Disconnected' && data.status !== 'Error';
+
+    if (isNetworkActive) {
       connectBtn.style.display = 'none';
       disconnectBtn.style.display = 'block';
       userGroup.style.display = 'none';
@@ -68,11 +88,7 @@ async function updateUI() {
       userGroup.style.display = 'block';
     }
     
-    if (data.status.startsWith('Connected to ')) {
-      sendBtn.disabled = false;
-    } else {
-      sendBtn.disabled = true;
-    }
+    sendBtn.disabled = !isActuallyConnected;
   }
 
   if (data.history) {

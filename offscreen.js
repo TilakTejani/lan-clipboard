@@ -31,11 +31,26 @@ async function broadcast(data) {
   }
 }
 
-async function handleIncomingData(data) {
+async function handleIncomingData(data, sourceConn) {
   try {
     if (data.type === 'HANDSHAKE') {
-      const partnerName = data.username || 'Partner';
-      chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: `Connected to ${partnerName}` });
+      if (sourceConn) {
+        sourceConn.partnerName = data.username || 'Partner';
+      }
+      if (isHost) {
+        broadcastParticipants();
+      } else {
+        const partnerName = data.username || 'Partner';
+        chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: [partnerName] });
+        chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected' });
+      }
+      return;
+    }
+
+    if (data.type === 'PARTICIPANTS') {
+      const others = data.names.filter(n => n !== myName);
+      chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: others });
+      chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected' });
       return;
     }
 
@@ -171,6 +186,29 @@ function startPolling() {
   });
 }
 
+function broadcastParticipants() {
+  if (!isHost) return;
+  const names = [myName];
+  connections.forEach(c => {
+    if (c.open && c.partnerName) {
+      if (!names.includes(c.partnerName)) names.push(c.partnerName);
+    }
+  });
+  
+  const others = names.filter(n => n !== myName);
+  chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: others });
+  
+  if (others.length === 0) {
+    chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Waiting for partner...' });
+  } else {
+    chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected' });
+  }
+  
+  connections.forEach(c => {
+    if (c.open) c.send({ type: 'PARTICIPANTS', names });
+  });
+}
+
 function cleanup() {
   if (pollInterval) clearInterval(pollInterval);
   if (peer) peer.destroy();
@@ -193,11 +231,11 @@ function setupPeer(code, username) {
     hostConn.on('open', () => {
       isHost = false;
       startPolling();
-      chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected to partner' });
+      chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connecting...' });
       hostConn.send({ type: 'HANDSHAKE', username: myName });
     });
 
-    hostConn.on('data', handleIncomingData);
+    hostConn.on('data', (data) => handleIncomingData(data, hostConn));
     
     hostConn.on('close', () => {
       chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Disconnected' });
@@ -213,23 +251,21 @@ function setupPeer(code, username) {
       peer.on('open', () => {
         isHost = true;
         startPolling();
+        chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: [] });
         chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Waiting for partner...' });
       });
 
       peer.on('connection', (conn) => {
         connections.push(conn);
-        chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected to partner' });
         
         const sendHandshake = () => conn.send({ type: 'HANDSHAKE', username: myName });
         if (conn.open) sendHandshake();
         else conn.on('open', sendHandshake);
         
-        conn.on('data', handleIncomingData);
+        conn.on('data', (data) => handleIncomingData(data, conn));
         conn.on('close', () => {
           connections = connections.filter(c => c !== conn);
-          if (connections.length === 0) {
-            chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Waiting for partner...' });
-          }
+          broadcastParticipants();
         });
       });
       

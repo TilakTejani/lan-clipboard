@@ -95,45 +95,49 @@
       background-color: #dc2626;
     }
     
-    .status-container {
+    .badges-container {
       margin-top: 16px;
       display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .badge {
+      display: inline-flex;
       align-items: center;
-      justify-content: center;
-      padding: 10px;
-      border-radius: 8px;
-      background-color: #f3f4f6;
-      font-size: 13px;
-      font-weight: 500;
-      color: #4b5563;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
     }
     .status-dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      margin-right: 8px;
-      background-color: #9ca3af;
+      margin-right: 6px;
     }
-    .status-container.connected {
-      background-color: #ecfdf5;
-      color: #065f46;
-    }
-    .status-container.connected .status-dot {
-      background-color: #10b981;
-    }
-    .status-container.error {
-      background-color: #fef2f2;
-      color: #991b1b;
-    }
-    .status-container.error .status-dot {
-      background-color: #ef4444;
-    }
-    .status-container.waiting {
+    .badge-waiting {
       background-color: #fffbeb;
       color: #b45309;
+      border: 1px solid #fde68a;
     }
-    .status-container.waiting .status-dot {
+    .badge-waiting .status-dot {
       background-color: #f59e0b;
+    }
+    .badge-connected {
+      background-color: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+    .badge-connected .status-dot {
+      background-color: #10b981;
+    }
+    .badge-connecting {
+      background-color: #f3f4f6;
+      color: #4b5563;
+      border: 1px solid #e5e7eb;
+    }
+    .badge-connecting .status-dot {
+      background-color: #9ca3af;
     }
     
     .input-section {
@@ -309,10 +313,7 @@
     <input type="text" id="username" placeholder="e.g. John's Mac">
   </div>
   
-  <div class="status-container" id="statusIndicator">
-    <div class="status-dot"></div>
-    <span id="statusText">Disconnected</span>
-  </div>
+  <div class="badges-container" id="badgesContainer"></div>
   
   <div class="input-section" id="inputSection">
     <label>Manual Input</label>
