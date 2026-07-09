@@ -184,17 +184,60 @@ async function updateUI() {
         a.style.wordBreak = 'break-all';
         a.textContent = item.content;
         contentDiv.appendChild(a);
+      } else if (item.type === 'file') {
+        const a = document.createElement('a');
+        a.href = item.fileData;
+        a.download = item.fileName;
+        a.textContent = `📎 Download ${item.fileName}`;
+        a.style.color = '#2563eb';
+        a.style.textDecoration = 'none';
+        a.style.fontWeight = '600';
+        a.style.display = 'inline-block';
+        a.style.padding = '8px';
+        a.style.backgroundColor = '#eff6ff';
+        a.style.borderRadius = '6px';
+        contentDiv.appendChild(a);
       } else {
         contentDiv.classList.add('text-item');
-        contentDiv.textContent = item.content;
+        
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        let originalText = item.content;
+        
+        if (urlRegex.test(originalText)) {
+          let html = originalText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          html = html.replace(urlRegex, (url) => `<a href="${url}" target="_blank" style="color: #2563eb; text-decoration: underline;">${url}</a>`);
+          contentDiv.innerHTML = html;
+          
+          const urls = originalText.match(urlRegex) || [];
+          for (const url of urls) {
+            if (url.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i)) {
+              const img = document.createElement('img');
+              img.src = url;
+              img.style.marginTop = '8px';
+              img.style.display = 'block';
+              img.style.maxWidth = '100%';
+              img.style.borderRadius = '4px';
+              contentDiv.appendChild(img);
+            }
+          }
+        } else {
+          contentDiv.textContent = item.content;
+        }
+
         li.title = 'Click to copy text';
-        li.onclick = () => {
-          navigator.clipboard.writeText(item.content);
+        li.onclick = (e) => {
+          if (e.target.tagName === 'A' || e.target.tagName === 'IMG') return; // don't trigger copy when clicking a link/img
+          
+          navigator.clipboard.writeText(originalText);
+          
+          const originalNodes = Array.from(contentDiv.childNodes);
+          contentDiv.innerHTML = '';
           contentDiv.textContent = 'Copied!';
           contentDiv.style.color = '#10b981';
           contentDiv.style.fontWeight = '500';
           setTimeout(() => { 
-            contentDiv.textContent = item.content; 
+            contentDiv.innerHTML = '';
+            originalNodes.forEach(n => contentDiv.appendChild(n));
             contentDiv.style.color = '';
             contentDiv.style.fontWeight = '';
           }, 1000);
@@ -364,35 +407,31 @@ function insertTabUrl() {
 manualInput.addEventListener('keydown', (e) => {
   if (mentionDropdown.style.display === 'block') {
     const items = mentionDropdown.querySelectorAll('.mention-item');
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (mentionIndex < items.length - 1) {
+    if (items.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
         items[mentionIndex].classList.remove('selected');
-        mentionIndex++;
+        mentionIndex = (mentionIndex + 1) % items.length;
         items[mentionIndex].classList.add('selected');
-      }
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (mentionIndex > 0) {
+        items[mentionIndex].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
         items[mentionIndex].classList.remove('selected');
-        mentionIndex--;
+        mentionIndex = (mentionIndex - 1 + items.length) % items.length;
         items[mentionIndex].classList.add('selected');
+        items[mentionIndex].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        if (items[mentionIndex].classList.contains('tab-option')) {
+           insertTabUrl();
+        } else {
+           insertMention(items[mentionIndex].textContent);
+        }
       }
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const selectedItem = items[mentionIndex];
-      if (selectedItem.classList.contains('tab-option')) {
-         insertTabUrl();
-      } else {
-         insertMention(selectedItem.textContent);
-      }
-      return;
-    } else if (e.key === 'Escape') {
-      mentionDropdown.style.display = 'none';
     }
-  } else {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+  } else if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (!sendBtn.disabled) {
       sendBtn.click();
     }
   }
@@ -427,5 +466,60 @@ shareTabBtn.addEventListener('click', async () => {
     }
   } catch (e) {
     console.error('Failed to get tab info', e);
+  }
+});
+
+manualInput.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  manualInput.style.borderColor = '#3b82f6';
+  manualInput.style.backgroundColor = '#eff6ff';
+});
+
+manualInput.addEventListener('dragleave', () => {
+  manualInput.style.borderColor = '';
+  manualInput.style.backgroundColor = '';
+});
+
+manualInput.addEventListener('drop', (e) => {
+  e.preventDefault();
+  manualInput.style.borderColor = '';
+  manualInput.style.backgroundColor = '';
+  
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    const file = e.dataTransfer.files[0];
+    
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = document.createElement('img');
+        img.src = reader.result;
+        manualInput.appendChild(img);
+        sendBtn.disabled = false;
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+    
+    if (file.size > 2 * 1024 * 1024) {
+      alert("File is too large! Please select a file under 2MB.");
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = manualInput.innerText.replace(/[\n\r]+$/, '').replace(/\u00A0/g, ' ');
+      let target = null;
+      currentOnlineUsers.forEach(u => {
+         if (text.includes(`@${u}`)) target = u;
+      });
+      
+      chrome.runtime.sendMessage({ 
+        type: 'BROADCAST_AND_SAVE_CLIP', 
+        clipData: { type: 'file', fileData: reader.result, fileName: file.name, mimeType: file.type, target: target } 
+      });
+      
+      manualInput.innerHTML = ''; 
+    };
+    reader.readAsDataURL(file);
   }
 });

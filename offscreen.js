@@ -127,6 +127,24 @@ async function handleIncomingData(data, sourceConn) {
         type: 'SAVE_CLIP', 
         clip: { type: 'image/png', content: dataUrl, sender: data.sender, timestamp: data.timestamp, target: data.target } 
       });
+    } else if (data.type === 'file') {
+      if (isHost) connections.forEach(c => { 
+        if (c.open && c !== sourceConn) {
+          if (data.target && c.partnerName !== data.target && c.partnerName !== data.sender) return;
+          c.send(data); 
+        }
+      });
+
+      if (data.target && data.target !== myName && data.sender !== myName) return;
+
+      const signature = 'file:' + data.fileName + ':' + data.fileData.length;
+      if (signature === lastClipboardSignature) return;
+      lastClipboardSignature = signature;
+      
+      chrome.runtime.sendMessage({ 
+        type: 'SAVE_CLIP', 
+        clip: { type: 'file', fileData: data.fileData, fileName: data.fileName, mimeType: data.mimeType, sender: data.sender, timestamp: data.timestamp, target: data.target } 
+      });
     }
   } catch (e) {
     if (e.name !== 'NotAllowedError' && e.name !== 'DOMException') {

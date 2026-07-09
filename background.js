@@ -111,6 +111,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               title: clip.target ? `Private Tab from ${clip.sender || 'Unknown'}` : `New Shared Tab from ${clip.sender || 'Unknown'}`,
               message: 'Click the extension to open: ' + clip.content.substring(0, 50)
             });
+          } else if (clip.type === 'file') {
+            chrome.notifications.create({
+              type: 'basic',
+              iconUrl: iconUrl,
+              title: clip.target ? `Private File from ${clip.sender || 'Unknown'}` : `New File from ${clip.sender || 'Unknown'}`,
+              message: `[File Received] ${clip.fileName}`
+            });
           } else {
             chrome.notifications.create({
               type: 'basic',
