@@ -25,7 +25,12 @@ async function broadcast(data) {
   }
 
   if (isHost) {
-    connections.forEach(c => { if (c.open) c.send(sendData); });
+    connections.forEach(c => { 
+      if (c.open) {
+        if (sendData.target && c.partnerName !== sendData.target && c.partnerName !== sendData.sender) return;
+        c.send(sendData); 
+      }
+    });
   } else if (hostConn && hostConn.open) {
     hostConn.send(sendData);
   }
@@ -55,11 +60,17 @@ async function handleIncomingData(data, sourceConn) {
     }
 
     if (data.type === 'text/plain') {
+      if (isHost) connections.forEach(c => { 
+        if (c.open && c !== sourceConn) {
+          if (data.target && c.partnerName !== data.target && c.partnerName !== data.sender) return;
+          c.send(data); 
+        }
+      });
+      
+      if (data.target && data.target !== myName && data.sender !== myName) return;
+
       const signature = 'text:' + data.text;
       if (signature === lastClipboardSignature) return;
-      
-      if (isHost) connections.forEach(c => { if (c.open) c.send(data); });
-      
       lastClipboardSignature = signature;
       
       navigator.clipboard.writeText(data.text).catch(err => {
@@ -73,7 +84,7 @@ async function handleIncomingData(data, sourceConn) {
       
       chrome.runtime.sendMessage({ 
         type: 'SAVE_CLIP', 
-        clip: { type: 'text/plain', content: data.text, sender: data.sender, timestamp: data.timestamp } 
+        clip: { type: 'text/plain', content: data.text, sender: data.sender, timestamp: data.timestamp, target: data.target } 
       });
     } else if (data.type === 'image/png') {
       let dataUrl = data.dataUrl;
@@ -88,11 +99,17 @@ async function handleIncomingData(data, sourceConn) {
       
       if (!dataUrl) return;
 
+      if (isHost) connections.forEach(c => { 
+        if (c.open && c !== sourceConn) {
+          if (data.target && c.partnerName !== data.target && c.partnerName !== data.sender) return;
+          c.send(data); 
+        }
+      });
+
+      if (data.target && data.target !== myName && data.sender !== myName) return;
+
       const signature = 'image:' + dataUrl.length;
       if (signature === lastClipboardSignature) return;
-      
-      if (isHost) connections.forEach(c => { if (c.open) c.send(data); });
-      
       lastClipboardSignature = signature;
       
       try {
@@ -108,7 +125,7 @@ async function handleIncomingData(data, sourceConn) {
       
       chrome.runtime.sendMessage({ 
         type: 'SAVE_CLIP', 
-        clip: { type: 'image/png', content: dataUrl, sender: data.sender, timestamp: data.timestamp } 
+        clip: { type: 'image/png', content: dataUrl, sender: data.sender, timestamp: data.timestamp, target: data.target } 
       });
     }
   } catch (e) {
@@ -209,17 +226,6 @@ function broadcastParticipants() {
   });
 }
 
-function broadcastClip(clipData) {
-  connections.forEach((c, peerId) => {
-    if (c.open) {
-      if (clipData.target && c.partnerName !== clipData.target && c.partnerName !== clipData.sender) {
-        // Skip this connection because the message is targeted to someone else
-        return;
-      }
-      c.send({ type: 'SAVE_CLIP', clip: clipData });
-    }
-  });
-}
 
 function cleanup() {
   if (pollInterval) clearInterval(pollInterval);
