@@ -96,60 +96,40 @@ async function handleIncomingData(data) {
   }
 }
 
-// Polling local clipboard using execCommand fallback
+// Polling local clipboard using modern navigator.clipboard API
 async function readClipboardData() {
-  return new Promise((resolve) => {
-    const onPaste = (e) => {
-      e.preventDefault();
-      document.removeEventListener('paste', onPaste);
-      
-      const items = e.clipboardData.items;
-      if (!items || items.length === 0) {
-        resolve(null);
-        return;
-      }
-      
-      let hasImage = false;
-      for (const item of items) {
-        if (item.type.indexOf('image') !== -1) {
-          hasImage = true;
-          const blob = item.getAsFile();
+  try {
+    // Try reading text first (faster and less prone to permission errors)
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      return { type: 'text', data: text };
+    }
+  } catch (e) {
+    // Fallback or ignore
+  }
+  
+  try {
+    // Try reading images
+    const items = await navigator.clipboard.read();
+    if (!items || items.length === 0) return null;
+    
+    for (const item of items) {
+      const imageType = item.types.find(t => t.startsWith('image/'));
+      if (imageType) {
+        const blob = await item.getType(imageType);
+        return new Promise((resolve) => {
           const reader = new FileReader();
           reader.onload = () => resolve({ type: 'image', data: reader.result }); // data URL
+          reader.onerror = () => resolve(null);
           reader.readAsDataURL(blob);
-          return;
-        }
+        });
       }
-      
-      if (!hasImage) {
-        const text = e.clipboardData.getData('text/plain');
-        if (text) {
-          resolve({ type: 'text', data: text });
-          return;
-        }
-      }
-      resolve(null);
-    };
-    
-    document.addEventListener('paste', onPaste);
-    
-    // Safety timeout in case paste event never fires
-    setTimeout(() => {
-      document.removeEventListener('paste', onPaste);
-      resolve(null);
-    }, 200);
-    
-    const ta = document.createElement('textarea');
-    document.body.appendChild(ta);
-    ta.focus();
-    const success = document.execCommand('paste');
-    document.body.removeChild(ta);
-    
-    if (!success) {
-      document.removeEventListener('paste', onPaste);
-      resolve(null);
     }
-  });
+  } catch (e) {
+    // Ignore errors (e.g., if clipboard is empty or unsupported format)
+  }
+  
+  return null;
 }
 
 function startPolling() {
