@@ -193,6 +193,7 @@ function setupPeer(code, username) {
     hostConn.on('open', () => {
       isHost = false;
       startPolling();
+      chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected to partner' });
       hostConn.send({ type: 'HANDSHAKE', username: myName });
     });
 
@@ -217,6 +218,7 @@ function setupPeer(code, username) {
 
       peer.on('connection', (conn) => {
         connections.push(conn);
+        chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected to partner' });
         
         const sendHandshake = () => conn.send({ type: 'HANDSHAKE', username: myName });
         if (conn.open) sendHandshake();

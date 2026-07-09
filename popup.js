@@ -195,3 +195,10 @@ sendBtn.addEventListener('click', async () => {
     }
   }
 });
+
+manualInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendBtn.click();
+  }
+});
