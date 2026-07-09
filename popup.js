@@ -91,9 +91,13 @@ async function updateUI() {
            b.className = 'badge badge-connected';
            b.innerHTML = `<div class="status-dot"></div>${u}`;
            b.style.cursor = 'pointer';
-           b.onclick = () => {
-             manualInput.innerText += (manualInput.innerText.length > 0 && !manualInput.innerText.endsWith(' ') ? ' ' : '') + `@${u} `;
+           b.onclick = (e) => {
+             e.preventDefault();
+             manualInput.focus();
              placeCaretAtEnd(manualInput);
+             const text = manualInput.textContent;
+             const space = (text.length > 0 && !text.endsWith(' ') && !text.endsWith('\n') && !text.endsWith('\xA0')) ? ' ' : '';
+             document.execCommand('insertText', false, `${space}@${u} `);
            };
            badgesContainer.appendChild(b);
          });
@@ -304,14 +308,10 @@ manualInput.addEventListener('input', () => {
         const div = document.createElement('div');
         div.className = 'mention-item tab-option';
         if (idxCount === 0) div.classList.add('selected');
-        div.innerHTML = `🌐 <strong>Share Current Tab</strong>`;
+        div.innerHTML = `🌐 <strong>Current Tab URL</strong>`;
         div.onmousedown = (e) => {
            e.preventDefault();
-           shareTabBtn.click();
-           mentionDropdown.style.display = 'none';
-           mentionIndex = -1;
-           const newText = manualInput.innerText.replace(/@[\w\s']*$/, '');
-           manualInput.innerText = newText;
+           insertTabUrl();
         };
         mentionDropdown.appendChild(div);
       }
@@ -328,13 +328,37 @@ manualInput.addEventListener('input', () => {
   }
 });
 
+function deleteLastMention() {
+   manualInput.focus();
+   placeCaretAtEnd(manualInput);
+   const text = manualInput.innerText.replace(/[\n\r]+$/, '').replace(/\u00A0/g, ' ');
+   const match = text.match(/@([\w\s']*)$/);
+   if (match) {
+       for (let i = 0; i < match[0].length; i++) {
+           document.execCommand('delete', false, null);
+       }
+   }
+}
+
 function insertMention(username) {
-   const text = manualInput.innerText;
-   const newText = text.replace(/@[\w\s']*$/, `@${username} `);
-   manualInput.innerText = newText;
+   deleteLastMention();
+   document.execCommand('insertText', false, `@${username} `);
    mentionDropdown.style.display = 'none';
    mentionIndex = -1;
-   placeCaretAtEnd(manualInput);
+}
+
+function insertTabUrl() {
+   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs[0];
+      if (tab && tab.url) {
+         deleteLastMention();
+         document.execCommand('insertText', false, tab.url + ' ');
+      } else {
+         deleteLastMention();
+      }
+      mentionDropdown.style.display = 'none';
+      mentionIndex = -1;
+   });
 }
 
 manualInput.addEventListener('keydown', (e) => {
@@ -358,11 +382,7 @@ manualInput.addEventListener('keydown', (e) => {
       e.preventDefault();
       const selectedItem = items[mentionIndex];
       if (selectedItem.classList.contains('tab-option')) {
-         shareTabBtn.click();
-         mentionDropdown.style.display = 'none';
-         mentionIndex = -1;
-         const newText = manualInput.innerText.replace(/@[\w\s']*$/, '');
-         manualInput.innerText = newText;
+         insertTabUrl();
       } else {
          insertMention(selectedItem.textContent);
       }
