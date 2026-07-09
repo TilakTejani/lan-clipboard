@@ -111,14 +111,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             chrome.notifications.create({
               type: 'basic',
               iconUrl: iconUrl,
-              title: `New Shared Tab from ${clip.sender || 'Unknown'}`,
+              title: clip.target ? `Private Tab from ${clip.sender || 'Unknown'}` : `New Shared Tab from ${clip.sender || 'Unknown'}`,
               message: 'Click the extension to open: ' + clip.content.substring(0, 50)
             });
           } else {
             chrome.notifications.create({
               type: 'basic',
               iconUrl: iconUrl,
-              title: `New Clip from ${clip.sender || 'Unknown'}`,
+              title: clip.target ? `Private Message from ${clip.sender || 'Unknown'}` : `New Clip from ${clip.sender || 'Unknown'}`,
               message: isImage ? '[Image Received]' : clip.content.substring(0, 50) + (clip.content.length > 50 ? '...' : '')
             });
           }
