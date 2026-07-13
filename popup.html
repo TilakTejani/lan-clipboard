@@ -264,6 +264,28 @@
       color: #d1d5db;
       cursor: not-allowed;
     }
+    #attachFileBtn {
+      width: 100%;
+      padding: 10px 12px;
+      margin-top: 8px;
+      background-color: #f3f4f6;
+      color: #4b5563;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #attachFileBtn:hover {
+      background-color: #e5e7eb;
+      color: #1f2937;
+    }
+    #attachFileBtn:disabled {
+      background-color: #f9fafb;
+      color: #d1d5db;
+      cursor: not-allowed;
+    }
 
     .history {
       margin-top: 24px;
@@ -375,6 +397,11 @@
     <input type="text" id="username" placeholder="e.g. John's Mac">
   </div>
   
+  <div class="form-group" id="roomGroup">
+    <label for="roomCodeInput">Room Code (optional)</label>
+    <input type="text" id="roomCodeInput" placeholder="default-lan-room">
+  </div>
+  
   <div class="badges-container" id="badgesContainer"></div>
   
   <div class="input-section" id="inputSection">
@@ -384,6 +411,8 @@
       <div id="mentionDropdown" class="mention-dropdown" style="display:none;"></div>
     </div>
     <button id="sendBtn" disabled>Send</button>
+    <button id="attachFileBtn" disabled>📎 Attach File</button>
+    <input type="file" id="fileInput" style="display:none">
     <button id="shareTabBtn" disabled>Share Current Tab</button>
   </div>
   

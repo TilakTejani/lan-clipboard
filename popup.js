@@ -7,7 +7,11 @@ const historyList = document.getElementById('historyList');
 const manualInput = document.getElementById('manualInput');
 const sendBtn = document.getElementById('sendBtn');
 const shareTabBtn = document.getElementById('shareTabBtn');
+const attachFileBtn = document.getElementById('attachFileBtn');
+const fileInput = document.getElementById('fileInput');
 const userGroup = document.getElementById('userGroup');
+const roomGroup = document.getElementById('roomGroup');
+const roomCodeInput = document.getElementById('roomCodeInput');
 const displayUsername = document.getElementById('displayUsername');
 const badgesContainer = document.getElementById('badgesContainer');
 
@@ -38,7 +42,7 @@ function updateTitle() {
 }
 
 // Load saved username or prompt for it on first run
-chrome.storage.local.get(['username'], (data) => {
+chrome.storage.local.get(['username', 'roomCode'], (data) => {
   if (data.username) {
     usernameInput.value = data.username;
     updateTitle();
@@ -51,6 +55,9 @@ chrome.storage.local.get(['username'], (data) => {
       updateTitle();
     }
   }
+  if (data.roomCode && data.roomCode !== 'default-lan-room') {
+    roomCodeInput.value = data.roomCode;
+  }
 });
 
 usernameInput.addEventListener('input', () => {
@@ -59,6 +66,11 @@ usernameInput.addEventListener('input', () => {
 
 usernameInput.addEventListener('change', () => {
   chrome.storage.local.set({ username: usernameInput.value.trim() });
+});
+
+roomCodeInput.addEventListener('change', () => {
+  const rc = roomCodeInput.value.trim() || 'default-lan-room';
+  chrome.storage.local.set({ roomCode: rc });
 });
 
 function formatTime(ts) {
@@ -110,14 +122,17 @@ async function updateUI() {
       connectBtn.style.display = 'none';
       disconnectBtn.style.display = 'block';
       userGroup.style.display = 'none';
+      roomGroup.style.display = 'none';
     } else {
       connectBtn.style.display = 'block';
       disconnectBtn.style.display = 'none';
       userGroup.style.display = 'block';
+      roomGroup.style.display = 'block';
     }
     
     sendBtn.disabled = !isActuallyConnected;
     shareTabBtn.disabled = !isActuallyConnected;
+    attachFileBtn.disabled = !isActuallyConnected;
   }
 
   if (data.history) {
@@ -253,7 +268,7 @@ connectBtn.addEventListener('click', async () => {
   const username = usernameInput.value.trim() || 'Anonymous';
   await chrome.storage.local.set({ username });
   
-  const roomCode = 'default-lan-room';
+  const roomCode = roomCodeInput.value.trim() || 'default-lan-room';
   await chrome.storage.local.set({ roomCode, status: 'Connecting...' });
   updateUI();
   chrome.runtime.sendMessage({ type: 'CONNECT', roomCode, username });
@@ -463,46 +478,60 @@ manualInput.addEventListener('dragleave', () => {
   manualInput.style.backgroundColor = '';
 });
 
+function sendFile(file) {
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = document.createElement('img');
+      img.src = reader.result;
+      manualInput.appendChild(img);
+      sendBtn.disabled = false;
+    };
+    reader.readAsDataURL(file);
+    return;
+  }
+
+  if (file.size > 2 * 1024 * 1024) {
+    alert("File is too large! Please select a file under 2MB.");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = manualInput.innerText.replace(/[\n\r]+$/, '').replace(/\u00A0/g, ' ');
+    let target = null;
+    currentOnlineUsers.forEach(u => {
+       if (text.includes(`@${u}`)) target = u;
+    });
+
+    chrome.runtime.sendMessage({
+      type: 'BROADCAST_AND_SAVE_CLIP',
+      clipData: { type: 'file', fileData: reader.result, fileName: file.name, mimeType: file.type, target: target }
+    });
+
+    manualInput.innerHTML = '';
+  };
+  reader.readAsDataURL(file);
+}
+
 manualInput.addEventListener('drop', (e) => {
   e.preventDefault();
   manualInput.style.borderColor = '';
   manualInput.style.backgroundColor = '';
-  
+
   if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-    const file = e.dataTransfer.files[0];
-    
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const img = document.createElement('img');
-        img.src = reader.result;
-        manualInput.appendChild(img);
-        sendBtn.disabled = false;
-      };
-      reader.readAsDataURL(file);
-      return;
-    }
-    
-    if (file.size > 2 * 1024 * 1024) {
-      alert("File is too large! Please select a file under 2MB.");
-      return;
-    }
-    
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = manualInput.innerText.replace(/[\n\r]+$/, '').replace(/\u00A0/g, ' ');
-      let target = null;
-      currentOnlineUsers.forEach(u => {
-         if (text.includes(`@${u}`)) target = u;
-      });
-      
-      chrome.runtime.sendMessage({ 
-        type: 'BROADCAST_AND_SAVE_CLIP', 
-        clipData: { type: 'file', fileData: reader.result, fileName: file.name, mimeType: file.type, target: target } 
-      });
-      
-      manualInput.innerHTML = ''; 
-    };
-    reader.readAsDataURL(file);
+    sendFile(e.dataTransfer.files[0]);
   }
+});
+
+attachFileBtn.addEventListener('click', () => {
+  if (attachFileBtn.disabled) return;
+  fileInput.click();
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files && fileInput.files.length > 0) {
+    sendFile(fileInput.files[0]);
+  }
+  fileInput.value = '';
 });

@@ -7,7 +7,76 @@ let lastClipboardSignature = null;
 let pollInterval = null;
 let myName = 'Anonymous';
 
+function detectDeviceType() {
+  const ua = navigator.userAgent || '';
+  if (/Windows/i.test(ua)) return 'Windows';
+  if (/Mac OS X|Macintosh/i.test(ua)) return 'macOS';
+  if (/CrOS/i.test(ua)) return 'ChromeOS';
+  if (/Android/i.test(ua)) return 'Android';
+  if (/Linux/i.test(ua)) return 'Linux';
+  return 'Desktop';
+}
+const myDeviceType = detectDeviceType();
+
+// WebRTC data channels have real per-message size limits; pushing a large
+// file/image through as a single message can destabilize the whole peer
+// connection. Anything over this size gets split into small 'file_chunk'
+// messages and reassembled on the other end instead.
+const CHUNK_SIZE = 16000;
+let chunkBuffers = {}; // transferId -> { total, chunks: [] }
+
+function sendToTargets(payload) {
+  if (isHost) {
+    connections.forEach(c => {
+      if (c.open) {
+        if (payload.target && c.partnerName !== payload.target && c.partnerName !== payload.sender) return;
+        c.send(payload);
+      }
+    });
+  } else if (hostConn && hostConn.open) {
+    hostConn.send(payload);
+  }
+}
+
+function broadcastChunked(originalType, payload, meta) {
+  const transferId = Date.now() + '-' + Math.random().toString(36).slice(2);
+  const total = Math.ceil(payload.length / CHUNK_SIZE);
+
+  for (let i = 0; i < total; i++) {
+    const chunk = payload.substring(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+    sendToTargets({
+      type: 'file_chunk',
+      transferId,
+      index: i,
+      total,
+      chunk,
+      originalType,
+      ...meta
+    });
+  }
+}
+
 async function broadcast(data) {
+  if (data.type === 'file' && data.fileData && data.fileData.length > CHUNK_SIZE) {
+    broadcastChunked('file', data.fileData, {
+      fileName: data.fileName,
+      mimeType: data.mimeType,
+      sender: data.sender,
+      timestamp: data.timestamp,
+      target: data.target
+    });
+    return;
+  }
+
+  if (data.type === 'image/png' && data.dataUrl && data.dataUrl.length > CHUNK_SIZE) {
+    broadcastChunked('image/png', data.dataUrl, {
+      sender: data.sender,
+      timestamp: data.timestamp,
+      target: data.target
+    });
+    return;
+  }
+
   let sendData = data;
   if (data.type === 'image/png' && data.dataUrl) {
     try {
@@ -24,16 +93,7 @@ async function broadcast(data) {
     }
   }
 
-  if (isHost) {
-    connections.forEach(c => { 
-      if (c.open) {
-        if (sendData.target && c.partnerName !== sendData.target && c.partnerName !== sendData.sender) return;
-        c.send(sendData); 
-      }
-    });
-  } else if (hostConn && hostConn.open) {
-    hostConn.send(sendData);
-  }
+  sendToTargets(sendData);
 }
 
 async function handleIncomingData(data, sourceConn) {
@@ -41,6 +101,7 @@ async function handleIncomingData(data, sourceConn) {
     if (data.type === 'HANDSHAKE') {
       if (sourceConn) {
         sourceConn.partnerName = data.username || 'Partner';
+        sourceConn.partnerDeviceType = data.deviceType || 'Unknown';
       }
       if (isHost) {
         broadcastParticipants();
@@ -141,10 +202,57 @@ async function handleIncomingData(data, sourceConn) {
       if (signature === lastClipboardSignature) return;
       lastClipboardSignature = signature;
       
-      chrome.runtime.sendMessage({ 
-        type: 'SAVE_CLIP', 
-        clip: { type: 'file', fileData: data.fileData, fileName: data.fileName, mimeType: data.mimeType, sender: data.sender, timestamp: data.timestamp, target: data.target } 
+      chrome.runtime.sendMessage({
+        type: 'SAVE_CLIP',
+        clip: { type: 'file', fileData: data.fileData, fileName: data.fileName, mimeType: data.mimeType, sender: data.sender, timestamp: data.timestamp, target: data.target }
       });
+    } else if (data.type === 'file_chunk') {
+      if (isHost) connections.forEach(c => {
+        if (c.open && c !== sourceConn) {
+          if (data.target && c.partnerName !== data.target && c.partnerName !== data.sender) return;
+          c.send(data);
+        }
+      });
+
+      const buf = chunkBuffers[data.transferId] || (chunkBuffers[data.transferId] = { total: data.total, chunks: new Array(data.total) });
+      buf.chunks[data.index] = data.chunk;
+      if (buf.chunks.some(c => c === undefined)) return;
+
+      delete chunkBuffers[data.transferId];
+      const fullPayload = buf.chunks.join('');
+
+      if (data.target && data.target !== myName && data.sender !== myName) return;
+
+      if (data.originalType === 'image/png') {
+        const signature = 'image:' + fullPayload.length;
+        if (signature === lastClipboardSignature) return;
+        lastClipboardSignature = signature;
+
+        try {
+          const res = await fetch(fullPayload);
+          const blob = await res.blob();
+          const item = new ClipboardItem({ 'image/png': blob });
+          await navigator.clipboard.write([item]);
+        } catch (e) {
+          if (e.name !== 'NotAllowedError' && e.name !== 'DOMException') {
+            console.error("Clipboard write failed", e);
+          }
+        }
+
+        chrome.runtime.sendMessage({
+          type: 'SAVE_CLIP',
+          clip: { type: 'image/png', content: fullPayload, sender: data.sender, timestamp: data.timestamp, target: data.target }
+        });
+      } else {
+        const signature = 'file:' + data.fileName + ':' + fullPayload.length;
+        if (signature === lastClipboardSignature) return;
+        lastClipboardSignature = signature;
+
+        chrome.runtime.sendMessage({
+          type: 'SAVE_CLIP',
+          clip: { type: 'file', fileData: fullPayload, fileName: data.fileName, mimeType: data.mimeType, sender: data.sender, timestamp: data.timestamp, target: data.target }
+        });
+      }
     }
   } catch (e) {
     if (e.name !== 'NotAllowedError' && e.name !== 'DOMException') {
@@ -224,23 +332,25 @@ function startPolling() {
 function broadcastParticipants() {
   if (!isHost) return;
   const names = [myName];
+  const deviceTypes = { [myName]: myDeviceType };
   connections.forEach(c => {
     if (c.open && c.partnerName) {
       if (!names.includes(c.partnerName)) names.push(c.partnerName);
+      deviceTypes[c.partnerName] = c.partnerDeviceType || 'Unknown';
     }
   });
-  
+
   const others = names.filter(n => n !== myName);
   chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: others });
-  
+
   if (others.length === 0) {
     chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Waiting for partner...' });
   } else {
     chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected' });
   }
-  
+
   connections.forEach(c => {
-    if (c.open) c.send({ type: 'PARTICIPANTS', names });
+    if (c.open) c.send({ type: 'PARTICIPANTS', names, deviceTypes });
   });
 }
 
@@ -268,7 +378,7 @@ function setupPeer(code, username) {
       isHost = false;
       startPolling();
       chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connecting...' });
-      hostConn.send({ type: 'HANDSHAKE', username: myName });
+      hostConn.send({ type: 'HANDSHAKE', username: myName, deviceType: myDeviceType });
     });
 
     hostConn.on('data', (data) => handleIncomingData(data, hostConn));
@@ -281,34 +391,40 @@ function setupPeer(code, username) {
 
   peer.on('error', (err) => {
     if (err.type === 'peer-unavailable') {
-      peer.destroy();
-      
-      peer = new Peer(hostId);
-      peer.on('open', () => {
-        isHost = true;
-        startPolling();
-        chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: [] });
-        chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Waiting for partner...' });
-      });
+      // Deferred: destroying/recreating this peer synchronously inside its
+      // own 'error' callback re-enters the event emitter mid-dispatch, which
+      // can leave it in a bad state (the same hazard fixed on the mobile
+      // side's peerdart usage).
+      setTimeout(() => {
+        peer.destroy();
 
-      peer.on('connection', (conn) => {
-        connections.push(conn);
-        
-        const sendHandshake = () => conn.send({ type: 'HANDSHAKE', username: myName });
-        if (conn.open) sendHandshake();
-        else conn.on('open', sendHandshake);
-        
-        conn.on('data', (data) => handleIncomingData(data, conn));
-        conn.on('close', () => {
-          connections = connections.filter(c => c !== conn);
-          broadcastParticipants();
+        peer = new Peer(hostId);
+        peer.on('open', () => {
+          isHost = true;
+          startPolling();
+          chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: [] });
+          chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Waiting for partner...' });
         });
-      });
-      
-      peer.on('error', (e) => {
-         console.error('Host peer error', e);
-         chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Error' });
-      });
+
+        peer.on('connection', (conn) => {
+          connections.push(conn);
+
+          const sendHandshake = () => conn.send({ type: 'HANDSHAKE', username: myName, deviceType: myDeviceType });
+          if (conn.open) sendHandshake();
+          else conn.on('open', sendHandshake);
+
+          conn.on('data', (data) => handleIncomingData(data, conn));
+          conn.on('close', () => {
+            connections = connections.filter(c => c !== conn);
+            broadcastParticipants();
+          });
+        });
+
+        peer.on('error', (e) => {
+           console.error('Host peer error', e);
+           chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Error' });
+        });
+      }, 0);
     } else {
       console.error('Client peer error', err);
       chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Error' });
