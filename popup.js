@@ -78,8 +78,25 @@ function formatTime(ts) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function deviceTypeIcon(deviceType) {
+  switch (deviceType) {
+    case 'Android':
+    case 'iPhone':
+      return '📱';
+    case 'iPad':
+      return '📲';
+    case 'Windows':
+    case 'macOS':
+    case 'Linux':
+    case 'ChromeOS':
+      return '💻';
+    default:
+      return '';
+  }
+}
+
 async function updateUI() {
-  const data = await chrome.storage.local.get(['status', 'history', 'onlineUsers']);
+  const data = await chrome.storage.local.get(['status', 'history', 'onlineUsers', 'onlineUserDeviceTypes']);
   
   if (data.status) {
     badgesContainer.innerHTML = '';
@@ -94,6 +111,7 @@ async function updateUI() {
     } else {
       isActuallyConnected = true;
       const users = data.onlineUsers || [];
+      const deviceTypes = data.onlineUserDeviceTypes || {};
       currentOnlineUsers = users;
       if (users.length === 0) {
          badgesContainer.innerHTML = `<div class="badge badge-connected"><div class="status-dot"></div>Connected</div>`;
@@ -101,7 +119,9 @@ async function updateUI() {
          users.forEach(u => {
            const b = document.createElement('div');
            b.className = 'badge badge-connected';
-           b.innerHTML = `<div class="status-dot"></div>${u}`;
+           const icon = deviceTypeIcon(deviceTypes[u]);
+           b.innerHTML = `<div class="status-dot"></div>${u}${icon ? ` ${icon}` : ''}`;
+           b.title = deviceTypes[u] || '';
            b.style.cursor = 'pointer';
            b.onclick = (e) => {
              e.preventDefault();

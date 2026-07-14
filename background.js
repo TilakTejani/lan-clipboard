@@ -90,7 +90,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   
   else if (message.type === 'PARTICIPANTS_UPDATE') {
-    chrome.storage.local.set({ onlineUsers: message.names });
+    chrome.storage.local.set({
+      onlineUsers: message.names,
+      onlineUserDeviceTypes: message.deviceTypes || {}
+    });
   }
 
   else if (message.type === 'SAVE_CLIP') {

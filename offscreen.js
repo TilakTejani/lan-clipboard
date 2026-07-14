@@ -99,6 +99,7 @@ async function broadcast(data) {
 async function handleIncomingData(data, sourceConn) {
   try {
     if (data.type === 'HANDSHAKE') {
+      console.log(`[RoomEntry] HANDSHAKE received: username="${data.username}" deviceType="${data.deviceType}" from peer="${sourceConn ? sourceConn.peer : 'unknown'}"`);
       if (sourceConn) {
         sourceConn.partnerName = data.username || 'Partner';
         sourceConn.partnerDeviceType = data.deviceType || 'Unknown';
@@ -107,7 +108,11 @@ async function handleIncomingData(data, sourceConn) {
         broadcastParticipants();
       } else {
         const partnerName = data.username || 'Partner';
-        chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: [partnerName] });
+        chrome.runtime.sendMessage({
+          type: 'PARTICIPANTS_UPDATE',
+          names: [partnerName],
+          deviceTypes: { [partnerName]: data.deviceType || 'Unknown' }
+        });
         chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected' });
       }
       return;
@@ -115,7 +120,11 @@ async function handleIncomingData(data, sourceConn) {
 
     if (data.type === 'PARTICIPANTS') {
       const others = data.names.filter(n => n !== myName);
-      chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: others });
+      chrome.runtime.sendMessage({
+        type: 'PARTICIPANTS_UPDATE',
+        names: others,
+        deviceTypes: data.deviceTypes || {}
+      });
       chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connected' });
       return;
     }
@@ -341,7 +350,8 @@ function broadcastParticipants() {
   });
 
   const others = names.filter(n => n !== myName);
-  chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: others });
+  console.log(`[RoomEntry] broadcastParticipants: ready=${JSON.stringify(names)} total_connections=${connections.length} (${connections.length - (names.length - 1)} not yet open/handshaken)`);
+  chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: others, deviceTypes });
 
   if (others.length === 0) {
     chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Waiting for partner...' });
@@ -368,13 +378,27 @@ function setupPeer(code, username) {
   roomCode = code;
   myName = username || 'Anonymous';
   const hostId = roomCode + '-lan-clipboard-host';
-  
-  peer = new Peer();
-  
+  console.log(`[RoomEntry] setupPeer() room="${roomCode}" me="${myName}" hostId="${hostId}"`);
+
+  // TEMP DIAGNOSTIC: verbose PeerJS/ICE logging to console while chasing the
+  // extension-stuck-connecting issue. Revert to `new Peer()` once resolved.
+  peer = new Peer(undefined, { debug: 3 });
+
   peer.on('open', (id) => {
-    hostConn = peer.connect(hostId);
-    
+    console.log(`[RoomEntry] signaling open, my peer id="${id}" — attempting connect() to hostId="${hostId}"`);
+    // Explicit 'json' serialization: PeerJS's real default is its own
+    // MessagePack-style binary packer (confirmed by reading peerjs.min.js's
+    // serializer classes), NOT plain UTF-8 JSON bytes. The mobile app's
+    // DataConnection.sendBinary()/_decodeAndHandle() only ever speak
+    // TextEncoder(JSON.stringify(...)) — i.e. exactly PeerJS's 'json'
+    // serializer's wire format. Without this, every message this side sends
+    // silently fails to decode on the mobile end (caught and dropped with no
+    // trace) — this was the actual root cause of the extension appearing
+    // "stuck connecting" while mobile devices connect to each other fine.
+    hostConn = peer.connect(hostId, { serialization: 'json' });
+
     hostConn.on('open', () => {
+      console.log(`[RoomEntry] DataConnection to host OPEN — sending HANDSHAKE as "${myName}" (${myDeviceType})`);
       isHost = false;
       startPolling();
       chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Connecting...' });
@@ -382,15 +406,18 @@ function setupPeer(code, username) {
     });
 
     hostConn.on('data', (data) => handleIncomingData(data, hostConn));
-    
+
     hostConn.on('close', () => {
+      console.log('[RoomEntry] DataConnection to host CLOSED');
       chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Disconnected' });
       cleanup();
     });
   });
 
   peer.on('error', (err) => {
+    console.log(`[RoomEntry] signaling error: type="${err.type}" message="${err.message}"`);
     if (err.type === 'peer-unavailable') {
+      console.log(`[RoomEntry] hostId="${hostId}" not registered yet — claiming host role`);
       // Deferred: destroying/recreating this peer synchronously inside its
       // own 'error' callback re-enters the event emitter mid-dispatch, which
       // can leave it in a bad state (the same hazard fixed on the mobile
@@ -398,23 +425,29 @@ function setupPeer(code, username) {
       setTimeout(() => {
         peer.destroy();
 
-        peer = new Peer(hostId);
+        peer = new Peer(hostId, { debug: 3 });
         peer.on('open', () => {
+          console.log(`[RoomEntry] became HOST for hostId="${hostId}"`);
           isHost = true;
           startPolling();
-          chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: [] });
+          chrome.runtime.sendMessage({ type: 'PARTICIPANTS_UPDATE', names: [], deviceTypes: {} });
           chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status: 'Waiting for partner...' });
         });
 
         peer.on('connection', (conn) => {
+          console.log(`[RoomEntry] incoming connection request from peer="${conn.peer}" (signaling-level, data channel not open yet)`);
           connections.push(conn);
 
-          const sendHandshake = () => conn.send({ type: 'HANDSHAKE', username: myName, deviceType: myDeviceType });
+          const sendHandshake = () => {
+            console.log(`[RoomEntry] DataConnection from peer="${conn.peer}" is now OPEN — sending HANDSHAKE as "${myName}" (${myDeviceType})`);
+            conn.send({ type: 'HANDSHAKE', username: myName, deviceType: myDeviceType });
+          };
           if (conn.open) sendHandshake();
           else conn.on('open', sendHandshake);
 
           conn.on('data', (data) => handleIncomingData(data, conn));
           conn.on('close', () => {
+            console.log(`[RoomEntry] connection from peer="${conn.peer}" CLOSED`);
             connections = connections.filter(c => c !== conn);
             broadcastParticipants();
           });
