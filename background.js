@@ -44,8 +44,18 @@ function addToHistory(clip) {
   chrome.storage.local.get(['history'], (data) => {
     let history = data.history || [];
     
-    // Simple deduplication based on content and timestamp difference (prevent double saves)
-    const existing = history.find(h => h.content === clip.content);
+    // Deduplicate by the actual data field for each clip type.
+    // Files use 'fileData'; everything else uses 'content'.
+    // Previously this always compared h.content === clip.content, which meant
+    // file clips (where content is undefined) matched every other file clip —
+    // making the guard useless and allowing duplicates through.
+    let existing;
+    if (clip.type === 'file') {
+      existing = history.find(h => h.type === 'file' && h.fileData === clip.fileData && h.fileName === clip.fileName);
+    } else {
+      existing = history.find(h => h.content === clip.content);
+    }
+
     if (existing) {
        // if within 5 seconds, ignore
        if (Math.abs(existing.timestamp - clip.timestamp) < 5000) return;
@@ -145,15 +155,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       clipData.sender = username;
       clipData.timestamp = timestamp;
       
-      const content = clipData.type === 'image/png' ? clipData.dataUrl : clipData.text;
+      // Build the history entry correctly for each clip type.
+      // Files need fileData/fileName/mimeType preserved — the generic
+      // `content` field only applies to text and image clips.
+      let historyEntry;
+      if (clipData.type === 'image/png') {
+        historyEntry = { type: 'image/png', content: clipData.dataUrl, sender: username, timestamp };
+      } else if (clipData.type === 'file') {
+        historyEntry = {
+          type: 'file',
+          fileData: clipData.fileData,
+          fileName: clipData.fileName,
+          mimeType: clipData.mimeType,
+          sender: username,
+          timestamp
+        };
+      } else {
+        historyEntry = { type: clipData.type, content: clipData.text, sender: username, timestamp };
+      }
       
       // Save locally
-      addToHistory({
-        type: clipData.type,
-        content: content,
-        sender: username,
-        timestamp: timestamp
-      });
+      addToHistory(historyEntry);
       
       // Forward to offscreen to broadcast over WebRTC
       chrome.runtime.sendMessage({

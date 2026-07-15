@@ -25,6 +25,24 @@ const myDeviceType = detectDeviceType();
 const CHUNK_SIZE = 16000;
 let chunkBuffers = {}; // transferId -> { total, chunks: [] }
 
+/**
+ * Converts a data: URL to a Blob without using fetch(), which is unreliable
+ * inside Chrome offscreen documents (fetch on data: URLs can fail silently).
+ */
+function dataUrlToBlob(dataUrl) {
+  const comma = dataUrl.indexOf(',');
+  const header = dataUrl.substring(0, comma);
+  const base64 = dataUrl.substring(comma + 1);
+  const mimeMatch = header.match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
+}
+
 function sendToTargets(payload) {
   if (isHost) {
     connections.forEach(c => {
@@ -183,8 +201,7 @@ async function handleIncomingData(data, sourceConn) {
       lastClipboardSignature = signature;
       
       try {
-        const res = await fetch(dataUrl);
-        const blob = await res.blob();
+        const blob = dataUrlToBlob(dataUrl);
         const item = new ClipboardItem({ 'image/png': blob });
         await navigator.clipboard.write([item]);
       } catch (e) {
@@ -238,8 +255,7 @@ async function handleIncomingData(data, sourceConn) {
         lastClipboardSignature = signature;
 
         try {
-          const res = await fetch(fullPayload);
-          const blob = await res.blob();
+          const blob = dataUrlToBlob(fullPayload);
           const item = new ClipboardItem({ 'image/png': blob });
           await navigator.clipboard.write([item]);
         } catch (e) {

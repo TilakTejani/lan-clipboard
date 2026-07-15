@@ -511,8 +511,8 @@ function sendFile(file) {
     return;
   }
 
-  if (file.size > 2 * 1024 * 1024) {
-    alert("File is too large! Please select a file under 2MB.");
+  if (file.size > 50 * 1024 * 1024) {
+    alert("File is too large! Please select a file under 50MB.");
     return;
   }
 
