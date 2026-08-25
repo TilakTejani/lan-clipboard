@@ -112,11 +112,10 @@ async function broadcastChunked(originalType, payload, meta) {
       ...meta
     });
     
-    // Yield to the event loop every 10 chunks to let the WebRTC buffer drain.
-    // This prevents the connection from crashing under the load of thousands of chunks.
-    if (i % 10 === 0) {
-      await new Promise(r => setTimeout(r, 5));
-    }
+    // Yield to the event loop after EVERY chunk to let the WebRTC buffer drain.
+    // Chrome WebRTC can silently drop packets if dataChannel.send() is called
+    // too many times synchronously in a tight loop.
+    await new Promise(r => setTimeout(r, 2));
   }
 }
 
