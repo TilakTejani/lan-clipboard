@@ -516,9 +516,12 @@ function setupPeer(code, username) {
   const hostId = roomCode + '-lan-clipboard-host';
   console.log(`[RoomEntry] setupPeer() room="${roomCode}" me="${myName}" hostId="${hostId}"`);
 
-  // TEMP DIAGNOSTIC: verbose PeerJS/ICE logging to console while chasing the
-  // extension-stuck-connecting issue. Revert to `new Peer()` once resolved.
-  peer = new Peer(undefined, { debug: 3 });
+  // The mobile app's DataConnection.sendBinary()/_decodeAndHandle() only ever speak
+  // TextEncoder(JSON.stringify(...)) — i.e. exactly PeerJS's 'json'
+  // serializer's wire format. Without this, every message this side sends
+  // silently fails to decode on the mobile end (caught and dropped with no
+  // trace).
+  peer = new Peer(undefined);
 
   peer.on('open', (id) => {
     console.log(`[RoomEntry] signaling open, my peer id="${id}" — attempting connect() to hostId="${hostId}"`);
@@ -561,7 +564,7 @@ function setupPeer(code, username) {
       setTimeout(() => {
         peer.destroy();
 
-        peer = new Peer(hostId, { debug: 3 });
+        peer = new Peer(hostId);
         peer.on('open', () => {
           console.log(`[RoomEntry] became HOST for hostId="${hostId}"`);
           isHost = true;
