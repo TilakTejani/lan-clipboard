@@ -171,6 +171,8 @@ async function broadcast(data) {
 
 async function handleIncomingData(data, sourceConn) {
   try {
+    console.log(`[offscreen] handleIncomingData received type: ${data.type}`, data.type === 'file_chunk' ? `index: ${data.index}/${data.total}` : '');
+    
     if (data.type === 'HANDSHAKE') {
       console.log(`[RoomEntry] HANDSHAKE received: username="${data.username}" deviceType="${data.deviceType}" from peer="${sourceConn ? sourceConn.peer : 'unknown'}"`);
       if (sourceConn) {
@@ -203,6 +205,7 @@ async function handleIncomingData(data, sourceConn) {
     }
 
     if (data.type === 'text/plain') {
+      console.log(`[offscreen] Received text/plain: length ${data.text ? data.text.length : 'undefined'}, target: ${data.target}`);
       if (isHost) connections.forEach(c => { 
         if (c.open && c !== sourceConn) {
           if (data.target && c.partnerName !== data.target && c.partnerName !== data.sender) return;
@@ -210,13 +213,21 @@ async function handleIncomingData(data, sourceConn) {
         }
       });
       
-      if (data.target && data.target !== myName && data.sender !== myName) return;
+      if (data.target && data.target !== myName && data.sender !== myName) {
+        console.log(`[offscreen] Ignoring text/plain as it is targeted for ${data.target} and I am ${myName}`);
+        return;
+      }
 
       const signature = 'text:' + data.text;
-      if (signature === lastClipboardSignature) return;
+      if (signature === lastClipboardSignature) {
+        console.log(`[offscreen] Ignoring text/plain as it matches lastClipboardSignature`);
+        return;
+      }
       lastClipboardSignature = signature;
       
+      console.log(`[offscreen] Attempting to copy text/plain to clipboard`);
       navigator.clipboard.writeText(data.text).catch(err => {
+        console.log(`[offscreen] navigator.clipboard.writeText failed, falling back to execCommand`, err);
         const ta = document.createElement('textarea');
         ta.value = data.text;
         document.body.appendChild(ta);
@@ -225,6 +236,7 @@ async function handleIncomingData(data, sourceConn) {
         document.body.removeChild(ta);
       });
       
+      console.log(`[offscreen] Sending SAVE_CLIP for text/plain`);
       chrome.runtime.sendMessage({ 
         type: 'SAVE_CLIP', 
         clip: { type: 'text/plain', content: data.text, sender: data.sender, timestamp: data.timestamp, target: data.target } 
@@ -313,10 +325,18 @@ async function handleIncomingData(data, sourceConn) {
       // just that one fragment and discarding the rest. Track a received
       // count instead so completion only fires once every index is filled.
       const buf = chunkBuffers[data.transferId] || (chunkBuffers[data.transferId] = { total: data.total, chunks: new Array(data.total), received: 0 });
-      if (buf.chunks[data.index] === undefined) buf.received++;
+      if (buf.chunks[data.index] === undefined) {
+        buf.received++;
+      }
       buf.chunks[data.index] = data.chunk;
+      
+      if (data.index % 10 === 0 || buf.received === buf.total) {
+        console.log(`[offscreen] file_chunk progress: ${buf.received}/${buf.total}`);
+      }
+      
       if (buf.received < buf.total) return;
 
+      console.log(`[offscreen] file_chunk complete, reassembling ${data.originalType}`);
       delete chunkBuffers[data.transferId];
       const fullPayload = buf.chunks.join('');
 
@@ -341,10 +361,15 @@ async function handleIncomingData(data, sourceConn) {
         });
       } else if (data.originalType === 'text/plain') {
         const signature = 'text:' + fullPayload;
-        if (signature === lastClipboardSignature) return;
+        if (signature === lastClipboardSignature) {
+          console.log(`[offscreen] Ignoring chunked text/plain as it matches lastClipboardSignature`);
+          return;
+        }
         lastClipboardSignature = signature;
         
+        console.log(`[offscreen] Attempting to copy chunked text/plain to clipboard`);
         navigator.clipboard.writeText(fullPayload).catch(err => {
+          console.log(`[offscreen] chunked navigator.clipboard.writeText failed, falling back to execCommand`, err);
           const ta = document.createElement('textarea');
           ta.value = fullPayload;
           document.body.appendChild(ta);
@@ -353,6 +378,7 @@ async function handleIncomingData(data, sourceConn) {
           document.body.removeChild(ta);
         });
         
+        console.log(`[offscreen] Sending SAVE_CLIP for chunked text/plain`);
         chrome.runtime.sendMessage({ 
           type: 'SAVE_CLIP', 
           clip: { type: 'text/plain', content: fullPayload, sender: data.sender, timestamp: data.timestamp, target: data.target } 
