@@ -80,11 +80,19 @@ function sendToTargets(payload) {
     connections.forEach(c => {
       if (c.open) {
         if (payload.target && c.partnerName !== payload.target && c.partnerName !== payload.sender) return;
-        c.send(payload);
+        try {
+          c.send(payload);
+        } catch (e) {
+          console.error('Failed to send payload to peer', c.peer, e);
+        }
       }
     });
   } else if (hostConn && hostConn.open) {
-    hostConn.send(payload);
+    try {
+      hostConn.send(payload);
+    } catch (e) {
+      console.error('Failed to send payload to host', e);
+    }
   }
 }
 
@@ -285,7 +293,11 @@ async function handleIncomingData(data, sourceConn) {
       if (isHost) connections.forEach(c => {
         if (c.open && c !== sourceConn) {
           if (data.target && c.partnerName !== data.target && c.partnerName !== data.sender) return;
-          c.send(data);
+          try {
+            c.send(data);
+          } catch (e) {
+            console.error('Failed to forward chunk to peer', c.peer, e);
+          }
         }
       });
 
@@ -332,12 +344,14 @@ async function handleIncomingData(data, sourceConn) {
         if (signature === lastClipboardSignature) return;
         lastClipboardSignature = signature;
         
-        const ta = document.createElement('textarea');
-        ta.value = fullPayload;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
+        navigator.clipboard.writeText(fullPayload).catch(err => {
+          const ta = document.createElement('textarea');
+          ta.value = fullPayload;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        });
         
         chrome.runtime.sendMessage({ 
           type: 'SAVE_CLIP', 
