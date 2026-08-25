@@ -97,11 +97,17 @@ function sendToTargets(payload) {
 }
 
 async function broadcastChunked(originalType, payload, meta) {
+  // PeerJS JSON channel hard limit is 16300 bytes.
+  // Base64 files are 1 byte/char, so 15000 chars is safe.
+  // Text can contain multi-byte UTF-8 chars (up to 3-4 bytes each),
+  // so we must use a much smaller string length chunk size to avoid crashing.
+  const safeChunkSize = originalType === 'text/plain' ? 3500 : 15000;
+  
   const transferId = Date.now() + '-' + Math.random().toString(36).slice(2);
-  const total = Math.ceil(payload.length / CHUNK_SIZE);
+  const total = Math.ceil(payload.length / safeChunkSize);
 
   for (let i = 0; i < total; i++) {
-    const chunk = payload.substring(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+    const chunk = payload.substring(i * safeChunkSize, (i + 1) * safeChunkSize);
     sendToTargets({
       type: 'file_chunk',
       transferId,
@@ -120,7 +126,7 @@ async function broadcastChunked(originalType, payload, meta) {
 }
 
 async function broadcast(data) {
-  if (data.type === 'file' && data.fileData && data.fileData.length > CHUNK_SIZE) {
+  if (data.type === 'file' && data.fileData && data.fileData.length > 15000) {
     await broadcastChunked('file', data.fileData, {
       fileName: data.fileName,
       mimeType: data.mimeType,
@@ -140,7 +146,7 @@ async function broadcast(data) {
     return;
   }
 
-  if (data.type === 'text/plain' && data.text && data.text.length > CHUNK_SIZE) {
+  if (data.type === 'text/plain' && data.text && data.text.length > 3500) {
     await broadcastChunked('text/plain', data.text, {
       sender: data.sender,
       timestamp: data.timestamp,
