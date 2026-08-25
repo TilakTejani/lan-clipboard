@@ -88,7 +88,7 @@ function sendToTargets(payload) {
   }
 }
 
-function broadcastChunked(originalType, payload, meta) {
+async function broadcastChunked(originalType, payload, meta) {
   const transferId = Date.now() + '-' + Math.random().toString(36).slice(2);
   const total = Math.ceil(payload.length / CHUNK_SIZE);
 
@@ -103,12 +103,18 @@ function broadcastChunked(originalType, payload, meta) {
       originalType,
       ...meta
     });
+    
+    // Yield to the event loop every 10 chunks to let the WebRTC buffer drain.
+    // This prevents the connection from crashing under the load of thousands of chunks.
+    if (i % 10 === 0) {
+      await new Promise(r => setTimeout(r, 5));
+    }
   }
 }
 
 async function broadcast(data) {
   if (data.type === 'file' && data.fileData && data.fileData.length > CHUNK_SIZE) {
-    broadcastChunked('file', data.fileData, {
+    await broadcastChunked('file', data.fileData, {
       fileName: data.fileName,
       mimeType: data.mimeType,
       sender: data.sender,
@@ -119,7 +125,7 @@ async function broadcast(data) {
   }
 
   if (data.type === 'image/png' && data.dataUrl && data.dataUrl.length > CHUNK_SIZE) {
-    broadcastChunked('image/png', data.dataUrl, {
+    await broadcastChunked('image/png', data.dataUrl, {
       sender: data.sender,
       timestamp: data.timestamp,
       target: data.target
@@ -128,7 +134,7 @@ async function broadcast(data) {
   }
 
   if (data.type === 'text/plain' && data.text && data.text.length > CHUNK_SIZE) {
-    broadcastChunked('text/plain', data.text, {
+    await broadcastChunked('text/plain', data.text, {
       sender: data.sender,
       timestamp: data.timestamp,
       target: data.target
