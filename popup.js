@@ -317,42 +317,45 @@ if (clearHistoryBtn) {
 
 sendBtn.addEventListener('click', async () => {
   if (sendBtn.disabled) return;
-  const img = manualInput.querySelector('img');
   
-  if (img) {
-    const src = img.src;
-    if (src.startsWith('data:image/')) {
-      sendBtn.disabled = true;
-      sendBtn.textContent = 'Sending...';
-      try {
-        chrome.runtime.sendMessage({ 
-          type: 'BROADCAST_AND_SAVE_CLIP', 
-          clipData: { type: 'image/png', dataUrl: src }
-        });
-        
-        manualInput.innerHTML = ''; // clear input
-      } catch (e) {
-        console.error(e);
-        alert('Failed to send image');
-      }
-      sendBtn.disabled = false;
-      sendBtn.textContent = 'Send';
-    }
-  } else {
-    // Handle text
-    const text = manualInput.innerText.trim();
-    let target = null;
-    currentOnlineUsers.forEach(u => {
-      if (text.includes(`@${u}`)) target = u;
-    });
+  const text = manualInput.innerText.trim();
+  let target = null;
+  currentOnlineUsers.forEach(u => {
+    if (text.includes(`@${u}`)) target = u;
+  });
 
-    if (text) {
+  const img = manualInput.querySelector('img');
+  let imageSent = false;
+  
+  if (img && img.src.startsWith('data:image/')) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Sending...';
+    try {
       chrome.runtime.sendMessage({ 
         type: 'BROADCAST_AND_SAVE_CLIP', 
-        clipData: { type: 'text/plain', text, target }
+        clipData: { type: 'image/png', dataUrl: img.src, target: target }
       });
-      manualInput.innerHTML = ''; // clear input
+      imageSent = true;
+    } catch (e) {
+      console.error(e);
+      alert('Failed to send image');
     }
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send';
+  }
+
+  // If text is basically just the mention and we sent an image, we don't need to send a redundant text message
+  const textWithoutMention = target ? text.replace(`@${target}`, '').trim() : text;
+  
+  if (text && (!imageSent || textWithoutMention.length > 0)) {
+    chrome.runtime.sendMessage({ 
+      type: 'BROADCAST_AND_SAVE_CLIP', 
+      clipData: { type: 'text/plain', text, target }
+    });
+  }
+
+  if (imageSent || text) {
+    manualInput.innerHTML = ''; // clear input
   }
 });
 

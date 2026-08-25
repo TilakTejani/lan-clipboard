@@ -160,7 +160,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // `content` field only applies to text and image clips.
       let historyEntry;
       if (clipData.type === 'image/png') {
-        historyEntry = { type: 'image/png', content: clipData.dataUrl, sender: username, timestamp };
+        historyEntry = { type: 'image/png', content: clipData.dataUrl, sender: username, timestamp, target: clipData.target };
       } else if (clipData.type === 'file') {
         historyEntry = {
           type: 'file',
@@ -168,10 +168,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           fileName: clipData.fileName,
           mimeType: clipData.mimeType,
           sender: username,
-          timestamp
+          timestamp,
+          target: clipData.target
         };
       } else {
-        historyEntry = { type: clipData.type, content: clipData.text, sender: username, timestamp };
+        historyEntry = { type: clipData.type, content: clipData.text, sender: username, timestamp, target: clipData.target };
       }
       
       // Save locally

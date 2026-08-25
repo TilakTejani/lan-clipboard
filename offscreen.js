@@ -43,6 +43,38 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([bytes], { type: mime });
 }
 
+/**
+ * Converts any image data: URL (JPEG, WEBP, GIF, etc.) to an image/png Blob
+ * suitable for navigator.clipboard.write().
+ *
+ * Chrome's ClipboardItem strictly validates that the Blob's MIME type matches
+ * the key string — passing a JPEG blob as { 'image/png': jpegBlob } throws
+ * DOMException: "Unable to download all specified images".
+ *
+ * If the source is already PNG this skips the canvas round-trip.
+ */
+function dataUrlToPngBlob(dataUrl) {
+  if (dataUrl.startsWith('data:image/png')) {
+    return Promise.resolve(dataUrlToBlob(dataUrl));
+  }
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(blob => {
+        if (blob) resolve(blob);
+        else reject(new Error('canvas.toBlob failed — image may be tainted or empty'));
+      }, 'image/png');
+    };
+    img.onerror = () => reject(new Error('Image failed to load for PNG conversion'));
+    img.src = dataUrl;
+  });
+}
+
 function sendToTargets(payload) {
   if (isHost) {
     connections.forEach(c => {
@@ -201,12 +233,14 @@ async function handleIncomingData(data, sourceConn) {
       lastClipboardSignature = signature;
       
       try {
-        const blob = dataUrlToBlob(dataUrl);
+        const blob = await dataUrlToPngBlob(dataUrl);
         const item = new ClipboardItem({ 'image/png': blob });
         await navigator.clipboard.write([item]);
       } catch (e) {
-        if (e.name !== 'NotAllowedError' && e.name !== 'DOMException') {
-          console.error("Clipboard write failed", e);
+        // Suppress focus/permission errors — these are expected when the
+        // extension popup isn't focused. Log everything else.
+        if (e.name !== 'NotAllowedError') {
+          console.error('Clipboard write failed', e);
         }
       }
       
@@ -240,14 +274,24 @@ async function handleIncomingData(data, sourceConn) {
         }
       });
 
-      const buf = chunkBuffers[data.transferId] || (chunkBuffers[data.transferId] = { total: data.total, chunks: new Array(data.total) });
+      // Early-exit BEFORE buffering: if the chunk is addressed to a specific
+      // peer that isn't us, the host has already forwarded it above — there's
+      // no reason to buffer any part of it in memory.
+      if (data.target && data.target !== myName && data.sender !== myName) return;
+
+      // `new Array(data.total)` creates a sparse array — Array#some() skips
+      // unset holes entirely instead of visiting them as undefined, so the
+      // old `buf.chunks.some(c => c === undefined)` check returned false
+      // (i.e. "complete") the moment a single chunk arrived, reassembling
+      // just that one fragment and discarding the rest. Track a received
+      // count instead so completion only fires once every index is filled.
+      const buf = chunkBuffers[data.transferId] || (chunkBuffers[data.transferId] = { total: data.total, chunks: new Array(data.total), received: 0 });
+      if (buf.chunks[data.index] === undefined) buf.received++;
       buf.chunks[data.index] = data.chunk;
-      if (buf.chunks.some(c => c === undefined)) return;
+      if (buf.received < buf.total) return;
 
       delete chunkBuffers[data.transferId];
       const fullPayload = buf.chunks.join('');
-
-      if (data.target && data.target !== myName && data.sender !== myName) return;
 
       if (data.originalType === 'image/png') {
         const signature = 'image:' + fullPayload.length;
@@ -255,12 +299,12 @@ async function handleIncomingData(data, sourceConn) {
         lastClipboardSignature = signature;
 
         try {
-          const blob = dataUrlToBlob(fullPayload);
+          const blob = await dataUrlToPngBlob(fullPayload);
           const item = new ClipboardItem({ 'image/png': blob });
           await navigator.clipboard.write([item]);
         } catch (e) {
-          if (e.name !== 'NotAllowedError' && e.name !== 'DOMException') {
-            console.error("Clipboard write failed", e);
+          if (e.name !== 'NotAllowedError') {
+            console.error('Clipboard write failed', e);
           }
         }
 
