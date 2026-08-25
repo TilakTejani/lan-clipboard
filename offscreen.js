@@ -127,6 +127,15 @@ async function broadcast(data) {
     return;
   }
 
+  if (data.type === 'text/plain' && data.text && data.text.length > CHUNK_SIZE) {
+    broadcastChunked('text/plain', data.text, {
+      sender: data.sender,
+      timestamp: data.timestamp,
+      target: data.target
+    });
+    return;
+  }
+
   let sendData = data;
   if (data.type === 'image/png' && data.dataUrl) {
     try {
@@ -311,6 +320,22 @@ async function handleIncomingData(data, sourceConn) {
         chrome.runtime.sendMessage({
           type: 'SAVE_CLIP',
           clip: { type: 'image/png', content: fullPayload, sender: data.sender, timestamp: data.timestamp, target: data.target }
+        });
+      } else if (data.originalType === 'text/plain') {
+        const signature = 'text:' + fullPayload;
+        if (signature === lastClipboardSignature) return;
+        lastClipboardSignature = signature;
+        
+        const ta = document.createElement('textarea');
+        ta.value = fullPayload;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        
+        chrome.runtime.sendMessage({ 
+          type: 'SAVE_CLIP', 
+          clip: { type: 'text/plain', content: fullPayload, sender: data.sender, timestamp: data.timestamp, target: data.target } 
         });
       } else {
         const signature = 'file:' + data.fileName + ':' + fullPayload.length;
